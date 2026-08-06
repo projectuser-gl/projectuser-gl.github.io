@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms of Service — SayLang LLC</title>
+<meta name="description" content="Terms of Service for SayLang LLC.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0e1013; --surface:#161a20; --surface2:#1c2129; --border:#272d37;
+    --text:#eef1f5; --muted:#98a2b1; --accent:#33c9a3; --accent-2:#5b8def;
+    --maxw:1060px; --r:14px;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f6f7f9; --surface:#ffffff; --surface2:#f0f2f5; --border:#e2e6ec;
+      --text:#141821; --muted:#5c6672; --accent:#128a70; --accent-2:#3564c9; }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:'Inter',system-ui,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  h1,h2,h3{font-family:'Sora',system-ui,sans-serif;line-height:1.15;text-wrap:balance;margin:0}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+  .eyebrow{font-size:.78rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);
+    font-weight:600;font-family:'Sora',sans-serif}
+
+  /* header */
+  header{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);
+    background:color-mix(in srgb,var(--bg) 82%,transparent);border-bottom:1px solid var(--border)}
+  .bar{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .brand{font-family:'Sora',sans-serif;font-weight:700;font-size:1.05rem;letter-spacing:-.01em;
+    display:flex;align-items:center;gap:10px}
+  .dot{width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,var(--accent),var(--accent-2))}
+  .nav{display:flex;gap:26px;font-size:.92rem;color:var(--muted);font-weight:500}
+  .nav a:hover{color:var(--text)}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:10px;
+    font-weight:600;font-size:.92rem;font-family:'Sora',sans-serif;border:1px solid transparent;cursor:pointer}
+  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#06231d}
+  .btn-primary:hover{filter:brightness(1.07)}
+  .btn-ghost{border-color:var(--border);color:var(--text)}
+  .btn-ghost:hover{border-color:var(--accent)}
+  @media(max-width:640px){.nav{display:none}}
+
+  /* hero */
+  .hero{padding:88px 0 64px;position:relative;overflow:hidden}
+  .hero::before{content:"";position:absolute;inset:-40% -10% auto auto;width:60%;height:520px;
+    background:radial-gradient(circle at 70% 30%,color-mix(in srgb,var(--accent) 22%,transparent),transparent 60%);
+    filter:blur(20px);pointer-events:none}
+  .hero h1{font-size:clamp(2.3rem,5.4vw,3.7rem);font-weight:700;letter-spacing:-.02em;margin:16px 0 0}
+  .hero .lead{font-size:clamp(1.05rem,2.1vw,1.28rem);color:var(--muted);max-width:60ch;margin:20px 0 0}
+  .hero .cta{display:flex;gap:14px;margin-top:32px;flex-wrap:wrap}
+  .stats{display:flex;gap:38px;margin-top:44px;flex-wrap:wrap}
+  .stat b{font-family:'Sora',sans-serif;font-size:1.7rem;font-weight:700;display:block;letter-spacing:-.01em}
+  .stat span{color:var(--muted);font-size:.86rem}
+
+  /* sections */
+  section{padding:64px 0}
+  .sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:28px;flex-wrap:wrap}
+  .sec-head h2{font-size:clamp(1.5rem,3vw,2rem);font-weight:600}
+
+  /* work */
+  .work{display:grid;gap:22px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;
+    transition:border-color .2s,transform .2s}
+  .card:hover{border-color:color-mix(in srgb,var(--accent) 55%,var(--border));transform:translateY(-2px)}
+  .feature{display:grid;grid-template-columns:1.05fr 1fr;gap:0}
+  .feature .media{background:var(--surface2);min-height:100%}
+  .feature .media img{width:100%;height:100%;object-fit:cover;display:block}
+  .feature .body{padding:34px}
+  .tag{display:inline-block;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--accent);font-weight:600;font-family:'Sora',sans-serif}
+  .card h3{font-size:1.45rem;font-weight:600;margin:12px 0 10px}
+  .card p{color:var(--muted);margin:0 0 16px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{font-size:.78rem;color:var(--text);background:var(--surface2);border:1px solid var(--border);
+    padding:5px 11px;border-radius:99px}
+  .thumbs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px}
+  .thumbs img{width:100%;border-radius:10px;border:1px solid var(--border);display:block}
+  @media(max-width:760px){.feature{grid-template-columns:1fr}.feature .media img{height:240px}}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  @media(max-width:760px){.two{grid-template-columns:1fr}}
+  .mini{padding:30px}
+  .mini h3{font-size:1.2rem;margin-bottom:8px}
+
+  /* contact */
+  .contact{background:var(--surface);border:1px solid var(--border);border-radius:20px;
+    padding:48px;text-align:center;position:relative;overflow:hidden}
+  .contact::before{content:"";position:absolute;inset:auto auto -50% -10%;width:50%;height:360px;
+    background:radial-gradient(circle,color-mix(in srgb,var(--accent-2) 20%,transparent),transparent 62%);filter:blur(10px)}
+  .contact h2{font-size:clamp(1.6rem,3.4vw,2.2rem);font-weight:700;margin-bottom:10px}
+  .contact p{color:var(--muted);max-width:52ch;margin:0 auto 26px}
+  .mail{font-family:'Sora',sans-serif;font-weight:600;font-size:1.05rem}
+
+  footer{border-top:1px solid var(--border);padding:30px 0;color:var(--muted);font-size:.86rem;
+    display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
+</style>
+<style>
+  .doc{max-width:78ch;margin:0 auto;padding:56px 20px 80px}
+  .doc h1{font-size:clamp(1.9rem,4vw,2.6rem);font-weight:700;letter-spacing:-.02em;margin:10px 0 6px}
+  .doc .upd{color:var(--muted);font-size:.9rem;margin-bottom:34px}
+  .doc h2{font-size:1.12rem;font-weight:600;margin:34px 0 10px}
+  .doc p,.doc li{color:var(--muted);line-height:1.75}
+  .doc ul{margin:8px 0 0 20px}
+  .doc li{margin-bottom:7px}
+  .doc a{color:var(--accent)}
+  .doc .note{border:1px solid var(--border);background:var(--surface);border-radius:var(--r);
+    padding:16px 18px;margin:22px 0;font-size:.93rem}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap bar">
+    <div class="brand"><span class="dot"></span> SayLang LLC</div>
+    <nav class="nav">
+      <a href="index.html">Home</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+    </nav>
+    <a class="btn btn-primary" href="mailto:emrejsx@gmail.com">Contact</a>
+  </div>
+</header>
+<main class="doc">
+  <span class="eyebrow">Legal</span>
+  <h1>Terms of Service</h1>
+  <div class="upd">Last updated: 6 August 2026</div>
+
+  <p>These terms govern your use of software, plugins and integrations published by SayLang LLC
+    ("SayLang", "we", "us"). By installing or using one of our products you agree to them.</p>
+
+  <h2>1. Licence</h2>
+  <p>Subject to these terms and to payment where a product is paid, we grant you a non-exclusive,
+    non-transferable licence to use the product for your own business or personal purposes. You may not
+    resell, sublicense or redistribute a product, or remove its authorship or licence notices.</p>
+
+  <h2>2. Acceptable use</h2>
+  <ul>
+    <li>Use our products only for lawful purposes and in line with the terms of any platform they run on.</li>
+    <li>Do not use them to send unsolicited messages, to circumvent access controls or rate limits, or to
+      collect personal data without a lawful basis.</li>
+    <li>Do not attempt to disrupt, overload or reverse engineer our services beyond what applicable law
+      expressly permits.</li>
+  </ul>
+
+  <h2>3. Third-party platforms</h2>
+  <p>Our integrations run on platforms operated by other companies. Those platforms have their own terms
+    and may change or withdraw the interfaces our products depend on. We are not responsible for the
+    availability, pricing or conduct of third-party platforms, and a product may stop working if a
+    platform changes materially.</p>
+
+  <h2>4. Fees and refunds</h2>
+  <p>Paid products are usually sold through a platform's own marketplace, and that marketplace's payment
+    and refund rules apply to the purchase. Where we sell directly, we will state the price, billing
+    period and refund terms at the point of sale.</p>
+
+  <h2>5. Support</h2>
+  <p>We provide support by email for products under an active licence. We aim to reply within two
+    business days. Support covers defects and questions about intended use; it does not include custom
+    development unless separately agreed.</p>
+
+  <h2>6. Warranty disclaimer</h2>
+  <p>Our products are provided "as is" and "as available". To the maximum extent permitted by law we
+    disclaim implied warranties of merchantability, fitness for a particular purpose and
+    non-infringement. We do not warrant that a product will be uninterrupted or error free.</p>
+
+  <h2>7. Limitation of liability</h2>
+  <p>To the maximum extent permitted by law, SayLang is not liable for indirect, incidental, special or
+    consequential damages, or for lost profits, revenue or data. Our total liability arising out of or
+    relating to a product is limited to the amount you paid us for that product in the twelve months
+    before the claim.</p>
+
+  <h2>8. Your data</h2>
+  <p>You keep ownership of your data. Our handling of personal data is described in our
+    <a href="privacy.html">Privacy Policy</a>. You are responsible for having the rights and lawful basis
+    needed for the data you process using our products.</p>
+
+  <h2>9. Termination</h2>
+  <p>You may stop using and uninstall a product at any time. We may suspend or terminate a licence if
+    these terms are breached, or if required by a platform or by law.</p>
+
+  <h2>10. Changes</h2>
+  <p>We may update these terms; the date above shows the current version. Continued use after a change
+    means you accept the updated terms.</p>
+
+  <h2>11. Governing law</h2>
+  <p>These terms are governed by the laws of the State of <strong>[STATE]</strong>, United States,
+    without regard to its conflict-of-laws rules. The courts located in
+    <strong>[COUNTY, STATE]</strong> have exclusive jurisdiction over any dispute.</p>
+
+  <h2>Contact</h2>
+  <p>SayLang LLC — <a href="mailto:emrejsx@gmail.com">emrejsx@gmail.com</a></p>
+</main>
+<footer class="wrap">
+  <span>© 2026 SayLang LLC — software &amp; integrations</span>
+  <span>
+    <a href="privacy.html" style="color:inherit">Privacy Policy</a> ·
+    <a href="terms.html" style="color:inherit">Terms of Service</a>
+  </span>
+</footer>
+</body>
+</html>
