@@ -5492,7 +5492,10 @@ function DEMO(){
       const stick = R.bt(0, 1);
       /* ⚠ Ocakta gelenin tutunması düşük — bilinen gerçek. */
       const adj = mo === 0 ? stick * 0.55 : stick;
-      const lifeMonths = 1 + Math.round(Math.pow(adj, 2.1) * 44);
+      /* ⚠ ÖLÇÜLDÜ: 2,1 üssü aylık kaybı %8,7'ye çıkarıyordu — sektör bandı
+         %2,5-5 ve %8,7 bir salon sahibine "bu iş batıyor" diye okunur.
+         Daha düz bir eğri ortalama üyelik ömrünü 14 aya çıkarıyor. */
+      const lifeMonths = 3 + Math.round(Math.pow(adj, 1.35) * 52);
       const endDay = day + Math.round(lifeMonths * 30.4);
       const left = endDay <= 0;
       members.push({id:id(), name:personName(R),
@@ -5515,7 +5518,11 @@ function DEMO(){
   const VKIND = ["Gym floor","Gym floor","Gym floor","Class","Class",
     "Personal training","Swim","Studio","Sauna only"];
   members.forEach(m => {
-    const perWeek = 0.4 + m._stick * 3.2;           /* haftada 0,4 - 3,6 */
+    /* ⚠ HERKES DÜZENLİ GELMİYOR. 0,4 taban, en tembel üyeyi bile 17 günde
+       bir salona sokuyordu ve "risk altında" listesi boş kalıyordu; oysa
+       gerçek salonlarda üyelerin ~%12'si aylardır uğramıyor ve aidat
+       ödemeye devam ediyor. */
+    const perWeek = m._stick < .12 ? R.bt(0, .12) : 0.35 + m._stick * 3.1;
     const from = Math.max(-400, m._startDay);
     const to = Math.min(0, m._endDay);
     for (let day = from; day <= to; day++){
