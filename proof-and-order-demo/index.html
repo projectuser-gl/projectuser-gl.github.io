@@ -1789,7 +1789,7 @@ function sparkGrid(items, opts){
         el("span", {class:"sm mut", style:{whiteSpace:"nowrap", overflow:"hidden",
           textOverflow:"ellipsis"}, text:it.k}),
         el("span", {class:"mono", style:{fontWeight:"600", fontSize:"13px"},
-          text:opts.fmt ? opts.fmt(it.v) : num(it.v)})
+          text:(it.fmt || opts.fmt || num)(it.v)})
       ]),
       spark(it.series || [], 999, 34, col)
     ]));
@@ -3256,9 +3256,20 @@ function trend(st, kind, h){
     el("div", {class:"panel-body"}, body)
   ]);
 }
+/* ⚠ AÇIK İŞ DÖNEM DIŞINDA KALIYORDU. `st.cur` yalnız tarihi geçmiş
+   kayıtları tutuyor; yarına yazılmış sipariş hiçbirine girmiyordu ve
+   fırın panosunda yedi aşamadan yalnız üçü görünüyordu (Paid · Invoiced
+   · Delivered). Sayılan pencere: hâlâ açık olan iş + bu dönemde kapanan. */
+function statusScope(st){
+  return memo("dash:scope:" + st.from, function(){
+    return rows(V.job.key).filter(j =>
+      isOpen(j) || (isRevenue(j) && inRange(jobDate(j), st.from, today())));
+  });
+}
 function statusData(st){
+  const live = statusScope(st);
   return V.job.stages.filter(s => !s.dead).map(s => ({
-    k:s.t, v:st.cur.filter(j => j.status === s.v).length, color:s.c}));
+    k:s.t, v:live.filter(j => j.status === s.v).length, color:s.c}));
 }
 function statusPart(st, kind, size){
   const d = statusData(st);
@@ -3280,13 +3291,10 @@ function statusPart(st, kind, size){
        kapanan iş — sahibin baktığı pencere bu. */
     title = "Where " + W("jobs") + " Stand";
     hint = "open work and this period";
-    const live = rows(V.job.key).filter(j =>
-      isOpen(j) || (isRevenue(j) && inRange(jobDate(j), st.from, today())));
-    body = funnel(V.job.stages.filter(s2 => !s2.dead).map(s2 => ({
-      k:s2.t, v:live.filter(j => j.status === s2.v).length,
-      color:s2.c})), {fmt:num, step:26});
+    body = funnel(d, {fmt:num, step:26});
   } else body = donut(d, {label:W("jobs"), size:size || 150});
-  return panel(title, hint, body, false, "chart fixed grow");
+  return panel(title, hint === "this period" ? "open work and this period" : hint,
+    body, false, "chart fixed grow");
 }
 function attention(){
   const AL = alerts();
@@ -3555,7 +3563,9 @@ function trendGrid(st){
     color:"var(--c5)"});
   const cnt = st.months.map(mk =>
     rows(V.job.key).filter(j => monthKey(jobDate(j)) === mk && isRevenue(j)).length);
-  items.push({k:W("jobs"), v:st.cur.length, series:cnt.slice(-9), color:"var(--c2)"});
+  /* ⚠ SAYIM PARA DEĞİL. Tek `fmt` ile "Orders" satırı $1.632 yazıyordu. */
+  items.push({k:W("jobs"), v:st.cur.length, series:cnt.slice(-9),
+    color:"var(--c2)", fmt:num});
   const prof = st.months.map((mk, i) => st.revSeries[i] - st.costSeries[i]);
   items.push({k:"Profit", v:st.profit, series:prof.slice(-9), color:"var(--c3)"});
   return el("div", {class:"panel"}, [

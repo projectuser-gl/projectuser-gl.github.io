@@ -117,6 +117,23 @@
   --c1:#8C3A46; --c2:#2C5F7C; --c3:#9A6512; --c4:#5E4A78; --c5:#3F6B4A; --c6:#A8322F;
 }
 
+/* ⚠ CRUST — fırın/pastane. Buğday zemini, kabuk kahvesi vurgu. Sekiz
+     paletin hiçbiri sıcak-amber değildi; fırın panosu çelik mavisiyle
+     doğru görünmüyor. */
+[data-skin="crust"]{
+  --ground:#F8F5EF; --paper:#FFFFFF; --sunk:#F1EBE0;
+  --ink:#1C1611;    --ink2:#4C4034;  --muted:#7C6F60;
+  --hair:#E5DCCC;   --hair2:#F3EEE4;
+  --accent:#A9601C; --accent-ink:#FFFFFF; --accent-soft:#F8EDE0;
+  --rail:#2A211A;   --rail-ink:#CBBCA9; --rail-active:#FFFFFF; --rail-hair:#3A2E24;
+  --good:#3D6B45;   --good-soft:#E8F1E9;
+  --bad:#A6322C;    --bad-soft:#F9EAE8;
+  --warn:#9A6512;   --warn-soft:#FAF0DF;
+  --info:#33607E;   --info-soft:#E9F0F5;
+  --c1:#A9601C; --c2:#33607E; --c3:#7A5230; --c4:#5E4A78; --c5:#3D6B45; --c6:#A6322C;
+}
+
+
 
 /* ═══ KABUK + BİLEŞENLER ════════════════════════════════════════════════
    ⚠ ARALIK LAYOUT'TAN GELİR. Kardeş grupları flex/grid + gap ile diz;
@@ -1772,7 +1789,7 @@ function sparkGrid(items, opts){
         el("span", {class:"sm mut", style:{whiteSpace:"nowrap", overflow:"hidden",
           textOverflow:"ellipsis"}, text:it.k}),
         el("span", {class:"mono", style:{fontWeight:"600", fontSize:"13px"},
-          text:opts.fmt ? opts.fmt(it.v) : num(it.v)})
+          text:(it.fmt || opts.fmt || num)(it.v)})
       ]),
       spark(it.series || [], 999, 34, col)
     ]));
@@ -3239,9 +3256,20 @@ function trend(st, kind, h){
     el("div", {class:"panel-body"}, body)
   ]);
 }
+/* ⚠ AÇIK İŞ DÖNEM DIŞINDA KALIYORDU. `st.cur` yalnız tarihi geçmiş
+   kayıtları tutuyor; yarına yazılmış sipariş hiçbirine girmiyordu ve
+   fırın panosunda yedi aşamadan yalnız üçü görünüyordu (Paid · Invoiced
+   · Delivered). Sayılan pencere: hâlâ açık olan iş + bu dönemde kapanan. */
+function statusScope(st){
+  return memo("dash:scope:" + st.from, function(){
+    return rows(V.job.key).filter(j =>
+      isOpen(j) || (isRevenue(j) && inRange(jobDate(j), st.from, today())));
+  });
+}
 function statusData(st){
+  const live = statusScope(st);
   return V.job.stages.filter(s => !s.dead).map(s => ({
-    k:s.t, v:st.cur.filter(j => j.status === s.v).length, color:s.c}));
+    k:s.t, v:live.filter(j => j.status === s.v).length, color:s.c}));
 }
 function statusPart(st, kind, size){
   const d = statusData(st);
@@ -3263,13 +3291,10 @@ function statusPart(st, kind, size){
        kapanan iş — sahibin baktığı pencere bu. */
     title = "Where " + W("jobs") + " Stand";
     hint = "open work and this period";
-    const live = rows(V.job.key).filter(j =>
-      isOpen(j) || (isRevenue(j) && inRange(jobDate(j), st.from, today())));
-    body = funnel(V.job.stages.filter(s2 => !s2.dead).map(s2 => ({
-      k:s2.t, v:live.filter(j => j.status === s2.v).length,
-      color:s2.c})), {fmt:num, step:26});
+    body = funnel(d, {fmt:num, step:26});
   } else body = donut(d, {label:W("jobs"), size:size || 150});
-  return panel(title, hint, body, false, "chart fixed grow");
+  return panel(title, hint === "this period" ? "open work and this period" : hint,
+    body, false, "chart fixed grow");
 }
 function attention(){
   const AL = alerts();
@@ -3538,7 +3563,9 @@ function trendGrid(st){
     color:"var(--c5)"});
   const cnt = st.months.map(mk =>
     rows(V.job.key).filter(j => monthKey(jobDate(j)) === mk && isRevenue(j)).length);
-  items.push({k:W("jobs"), v:st.cur.length, series:cnt.slice(-9), color:"var(--c2)"});
+  /* ⚠ SAYIM PARA DEĞİL. Tek `fmt` ile "Orders" satırı $1.632 yazıyordu. */
+  items.push({k:W("jobs"), v:st.cur.length, series:cnt.slice(-9),
+    color:"var(--c2)", fmt:num});
   const prof = st.months.map((mk, i) => st.revSeries[i] - st.costSeries[i]);
   items.push({k:"Profit", v:st.profit, series:prof.slice(-9), color:"var(--c3)"});
   return el("div", {class:"panel"}, [
@@ -4417,7 +4444,8 @@ const SKINS = [
   {v:"prairie",  t:"Prairie",  c:["#131A16","#2F6F4E","#F3F6F2"]},
   {v:"midnight", t:"Midnight", c:["#0A0E14","#F97316","#161D26"]},
   {v:"graphite", t:"Graphite", c:["#0C0E0F","#14B8A6","#1B1E20"]},
-  {v:"linen",    t:"Linen",    c:["#FBF8F3","#8C3A46","#F7F4EE"]}
+  {v:"linen",    t:"Linen",    c:["#FBF8F3","#8C3A46","#F7F4EE"]},
+  {v:"crust",    t:"Crust",    c:["#2A211A","#A9601C","#F8F5EF"]}
 ];
 
 function setField(f){
