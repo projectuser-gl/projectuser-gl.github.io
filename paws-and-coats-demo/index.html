@@ -440,6 +440,26 @@ table.dt th{ padding:calc(var(--row) + 1px) 10px }
   .tw{-webkit-overflow-scrolling:touch}
 }
 
+/* ═══ SÜTUN BOŞLUĞU ═════════════════════════════════════════════════════
+   ⚠ IZGARADA KISA SÜTUN ALTINDA BOŞLUK BIRAKIYORDU. `hero` panosunda sol
+     sütun (KPI + grafik) sağdakinden (halka + gösterge) kısa kalınca
+     "Revenue by Month"un altında koca bir boşluk kalıyordu — ekran yarım
+     görünüyor ve listing görselini bozuyor.
+   ⚠ ÇÖZÜM: ızgara hücreleri eşit yükseklikte, grafik paneli kalan yeri
+     DOLDURUYOR. SVG'ye yüzde yükseklik verilebilmesi için kabın flex
+     olması ve `min-height:0` olması şart — yoksa taşıyor.               */
+.grid > .panel,
+.grid > .stack{ height:100%; min-height:0 }
+.stack{ display:flex; flex-direction:column }
+.panel.grow{ flex:1; min-height:0 }
+.panel.chart{ display:flex; flex-direction:column }
+.panel.chart > .panel-body{
+  flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center;
+}
+.panel.chart > .panel-body > svg{ height:100%; min-height:170px; flex:1 }
+/* halka ve gösterge ortalansın, gerilmesin */
+.panel.chart.fixed > .panel-body > svg{ flex:0 0 auto; height:auto }
+
 /* ═══ BİLEŞENLER ════════════════════════════════════════════════════════ */
 
 /* ── PANEL ─────────────────────────────────────────────────────────── */
@@ -2540,8 +2560,8 @@ function periodStats(days){
 }
 
 /* ── WIDGET DAĞARCIĞI ──────────────────────────────────────────────── */
-function panel(title, hint, body, flush){
-  return el("div", {class:"panel"}, [
+function panel(title, hint, body, flush, cls){
+  return el("div", {class:"panel" + (cls ? " " + cls : "")}, [
     title ? el("div", {class:"panel-head"}, [
       el("h2", {text:title}),
       hint ? el("div", {class:"sp"}) : null,
@@ -2591,7 +2611,7 @@ function trend(st, kind, h){
           el("i", {style:{width:"9px",height:"9px",borderRadius:"2px",background:"var(--c5)"}}),
           el("span", {class:"mut", text:"Costs"})])
       ]);
-  return el("div", {class:"panel"}, [
+  return el("div", {class:"panel chart grow"}, [
     el("div", {class:"panel-head"}, [
       el("h2", {text:kind === "bars" ? "Revenue by Month" : "Revenue vs Costs"}),
       el("div", {class:"sp"}), legend
@@ -2607,7 +2627,8 @@ function statusPart(st, kind, size){
   const d = statusData(st);
   return panel(W("jobs") + " by Status", "this period",
     kind === "bars" ? hbars(d, {fmt:num})
-                    : donut(d, {label:W("jobs"), size:size || 150}));
+                    : donut(d, {label:W("jobs"), size:size || 150}),
+    false, "chart fixed grow");
 }
 function attention(){
   const AL = alerts();
@@ -2637,7 +2658,8 @@ function attention(){
 function rankClients(st){
   const d = topN(sumBy(st.cur, j => j[CK()], j => jobValue(j)), 6, clientName);
   return panel("Top " + W("clients"), null,
-    d.length ? hbars(d, {fmt:money0}) : noData(300, 110, "No revenue in this period"));
+    d.length ? hbars(d, {fmt:money0}) : noData(300, 110, "No revenue in this period"),
+    false, "grow");
 }
 function rankWorkers(st){
   const wf = V.job.workerEntity ? V.entities[V.job.workerEntity].jobField : null;
@@ -2646,7 +2668,8 @@ function rankWorkers(st){
     id => nameOf(V.job.workerEntity, id));
   return panel("Revenue by " + W("worker"), null,
     d.length ? hbars(d, {fmt:money0})
-             : noData(300, 110, "No " + W("worker").toLowerCase() + " assigned yet"));
+             : noData(300, 110, "No " + W("worker").toLowerCase() + " assigned yet"),
+    false, "grow");
 }
 function recentTable(n){
   const recent = rows(V.job.key).slice()
@@ -2664,9 +2687,10 @@ function recentTable(n){
   ]);
 }
 function heroNumber(c, st){
-  return el("div", {class:"panel"}, el("div", {class:"panel-body",
-    style:{display:"flex", gap:"22px", alignItems:"flex-end", flexWrap:"wrap"}}, [
-    el("div", {style:{flex:"1 1 240px", minWidth:"0"}}, [
+  return el("div", {class:"panel chart"}, el("div", {class:"panel-body",
+    style:{display:"flex", gap:"22px", alignItems:"center", flexWrap:"wrap",
+           flexDirection:"row"}}, [
+    el("div", {style:{flex:"1 1 240px", minWidth:"0", alignSelf:"center"}}, [
       el("div", {class:"kpi-label", style:{marginBottom:"5px"}, text:c.label}),
       el("div", {style:{font:"600 clamp(34px,5vw,52px)/1 var(--f-display)",
         fontVariantNumeric:"tabular-nums", letterSpacing:"-.02em",
@@ -2735,7 +2759,7 @@ function costMix(st){
     .sort((a, b) => b.tot - a.tot).slice(0, 5);
   const series = top.map((t, i) => ({color:"var(--c" + ((i % 6) + 1) + ")",
     data:st.months.map(mk => t.m[mk] || 0)}));
-  return el("div", {class:"panel"}, [
+  return el("div", {class:"panel chart grow"}, [
     el("div", {class:"panel-head"}, [
       el("h2", {text:"Where the Money Goes"}), el("div", {class:"sp"}),
       el("div", {class:"sm", style:{display:"flex", gap:"10px", flexWrap:"wrap"}},
@@ -2761,7 +2785,7 @@ function marginGauge(st){
         text:pct(m, 1), label:"margin"}),
       el("div", {class:"sm mut", style:{textAlign:"center", marginTop:"9px"},
         text:money0(st.rev) + " in · " + money0(st.rev - st.profit) + " out"})
-    ]));
+    ]), false, "chart fixed grow");
 }
 
 /* Aylık kırılım kıvılcımları — çok sayıda seriyi az yerde. */
