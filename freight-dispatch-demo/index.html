@@ -3411,10 +3411,21 @@ function rankBody(cur, prv, empty){
   }
   return hbars(cur, {fmt:money0});
 }
+/* ⚠ "TOP CHILDREN" DİYE BİR PANO OLMAZ. Sıralama panosu her dikeyde
+   müşteriyi sıralıyordu; kreşte bu hem anlamsız hem rahatsız edici bir
+   başlık üretiyordu ("en çok para getiren çocuklar"). Dikey kendi
+   sıralama eksenini verebiliyor: V.rank = {title, field, entity}. */
 function rankClients(st){
-  const cur = topN(sumBy(st.cur, j => j[CK()], j => jobValue(j)), 6, clientName);
-  const prv = topN(sumBy(st.prv, j => j[CK()], j => jobValue(j)), 40, clientName);
-  return panel("Top " + W("clients"), null,
+  const R_ = V.rank || {};
+  const field = R_.field || CK();
+  /* ⚠ Eksen bir VARLIK ise ada çevrilir; düz bir alansa (konu, tür) değeri
+     zaten okunur — clientName'den geçirmek onu boşa çıkarıyordu. */
+  const label = R_.entity ? (id => nameOf(R_.entity, id))
+    : R_.field ? (k => k || "—") : clientName;
+  const title = R_.title || ("Top " + W("clients"));
+  const cur = topN(sumBy(st.cur, j => j[field], j => jobValue(j)), 6, label);
+  const prv = topN(sumBy(st.prv, j => j[field], j => jobValue(j)), 40, label);
+  return panel(title, null,
     rankBody(cur, prv, "No revenue in this period"), false, "grow");
 }
 function rankWorkers(st){
@@ -5772,7 +5783,8 @@ const V = {
   design:{
     type:"technical", shell:"rail", surface:"card",
     density:"regular", dash:"kpi",
-           charts:{time:"combo", mix:"waterfall", part:"funnel", rank:"hbars", side:"scatter"} },
+           charts:{time:"combo", mix:"waterfall", part:"funnel", rank:"hbars",
+                   side:"hist"} },
   about:"A complete dispatch, invoicing and IFTA system that runs entirely on your own computer. No account, no subscription, no internet connection needed. Pay once, use it forever.",
   aboutNote:"IFTA figures are a worksheet, not a filing. Tax rates are the ones you enter; check them against your base jurisdiction's current table before you file.",
   dashSub:"Everything at a glance",

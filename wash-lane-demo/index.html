@@ -3411,10 +3411,21 @@ function rankBody(cur, prv, empty){
   }
   return hbars(cur, {fmt:money0});
 }
+/* ⚠ "TOP CHILDREN" DİYE BİR PANO OLMAZ. Sıralama panosu her dikeyde
+   müşteriyi sıralıyordu; kreşte bu hem anlamsız hem rahatsız edici bir
+   başlık üretiyordu ("en çok para getiren çocuklar"). Dikey kendi
+   sıralama eksenini verebiliyor: V.rank = {title, field, entity}. */
 function rankClients(st){
-  const cur = topN(sumBy(st.cur, j => j[CK()], j => jobValue(j)), 6, clientName);
-  const prv = topN(sumBy(st.prv, j => j[CK()], j => jobValue(j)), 40, clientName);
-  return panel("Top " + W("clients"), null,
+  const R_ = V.rank || {};
+  const field = R_.field || CK();
+  /* ⚠ Eksen bir VARLIK ise ada çevrilir; düz bir alansa (konu, tür) değeri
+     zaten okunur — clientName'den geçirmek onu boşa çıkarıyordu. */
+  const label = R_.entity ? (id => nameOf(R_.entity, id))
+    : R_.field ? (k => k || "—") : clientName;
+  const title = R_.title || ("Top " + W("clients"));
+  const cur = topN(sumBy(st.cur, j => j[field], j => jobValue(j)), 6, label);
+  const prv = topN(sumBy(st.prv, j => j[field], j => jobValue(j)), 40, label);
+  return panel(title, null,
     rankBody(cur, prv, "No revenue in this period"), false, "grow");
 }
 function rankWorkers(st){
@@ -5576,7 +5587,8 @@ const V = {
      sabah açınca önce bugün ne var ona bakar, aylık grafiğe değil. */
   design:{ type:"geometric", shell:"light", surface:"soft",
            density:"regular", dash:"focus",
-           charts:{time:"heat", mix:"stack", part:"waffle", rank:"bullet", side:"gauge"} },
+           charts:{time:"heat", mix:"stack", part:"bars", rank:"hbars",
+                   side:"gauge"} },
   about:"Everything a wash site needs: today's queue, unlimited memberships, cost per car and who's actually profitable. Runs on your own computer — no account, no subscription, no internet needed.",
   dashSub:"Today on the lane",
   allClear:"No expiring memberships, no unpaid accounts, nothing overdue.",

@@ -3411,10 +3411,21 @@ function rankBody(cur, prv, empty){
   }
   return hbars(cur, {fmt:money0});
 }
+/* ⚠ "TOP CHILDREN" DİYE BİR PANO OLMAZ. Sıralama panosu her dikeyde
+   müşteriyi sıralıyordu; kreşte bu hem anlamsız hem rahatsız edici bir
+   başlık üretiyordu ("en çok para getiren çocuklar"). Dikey kendi
+   sıralama eksenini verebiliyor: V.rank = {title, field, entity}. */
 function rankClients(st){
-  const cur = topN(sumBy(st.cur, j => j[CK()], j => jobValue(j)), 6, clientName);
-  const prv = topN(sumBy(st.prv, j => j[CK()], j => jobValue(j)), 40, clientName);
-  return panel("Top " + W("clients"), null,
+  const R_ = V.rank || {};
+  const field = R_.field || CK();
+  /* ⚠ Eksen bir VARLIK ise ada çevrilir; düz bir alansa (konu, tür) değeri
+     zaten okunur — clientName'den geçirmek onu boşa çıkarıyordu. */
+  const label = R_.entity ? (id => nameOf(R_.entity, id))
+    : R_.field ? (k => k || "—") : clientName;
+  const title = R_.title || ("Top " + W("clients"));
+  const cur = topN(sumBy(st.cur, j => j[field], j => jobValue(j)), 6, label);
+  const prv = topN(sumBy(st.prv, j => j[field], j => jobValue(j)), 40, label);
+  return panel(title, null,
     rankBody(cur, prv, "No revenue in this period"), false, "grow");
 }
 function rankWorkers(st){
@@ -5682,7 +5693,8 @@ const V = {
   skin:"linen",
   design:{ type:"editorial", shell:"light", surface:"soft",
            density:"relaxed", dash:"report",
-           charts:{time:"heat", mix:"waterfall", part:"funnel", rank:"slope", side:"hist"} },
+           charts:{time:"heat", mix:"waterfall", part:"funnel", rank:"hbars",
+                   side:"hist"} },
   about:"Events, headcounts, food cost and staffing for a catering business. Runs on your own computer — no account, no subscription, no internet needed.",
   dashSub:"The season, event by event",
   allClear:"Every event has a final count, every deposit is in, nothing overdue.",
