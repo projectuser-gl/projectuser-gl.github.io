@@ -5777,7 +5777,11 @@ function DEMO(){
       /* ⚠ UZAĞA YARIM YÜK GİTMEZ. Mesafeye bakmadan yüz kordon satmak
          "40 km'ye üçte bir kordon" gibi 152 zararlı sefer üretiyordu. */
       const soldAs = c._trade && R.chance(.5) ? "bulk"
-        : c.miles > 22 ? (R.chance(.72) ? "cord" : "bulk")
+        /* ⚠ BİRKAÇ ZARARLI SEFER PLANLI: uzaktaki müşteri "sadece bir
+           yüz kordon" istiyor ve kamyon yine de gidiyor. Bu vaka
+           üretilmezse uyarı ailesi demoda hiç görünmüyor. */
+        : c.miles > 22 ? (R.chance(.045) ? "face"
+            : R.chance(.72) ? "cord" : "bulk")
         : pickSold();
       let units, cordsV;
       if (soldAs === "bulk"){
