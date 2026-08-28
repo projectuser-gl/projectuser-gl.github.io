@@ -1230,19 +1230,51 @@ function normalize(d){
   return out;
 }
 
+/* ⚠ localStorage'IN 5 MB TAVANI VAR VE SESSİZCE ÇARPILIYOR. Kreş ürünü
+   19.692 kayıtta 5,84 MB veri üretiyor; `setItem` QuotaExceededError
+   atıyor, ekranda bir uyarı çıkıyor ve KULLANICI SAYFAYI YENİLEYİNCE
+   HER ŞEY GİTMİŞ oluyor. Bu tek başına ürünü satılamaz yapardı: veri
+   yıllar içinde büyür, tavan bir gün mutlaka gelir.
+   Çözüm: taşınca IndexedDB'ye düşülüyor (kota yüzlerce MB) ve
+   localStorage'a bir işaret bırakılıyor. Küçük veri hızlı senkron
+   yolda kalıyor; büyük veri açılışta IndexedDB'den geliyor. */
+const BIG = () => LS() + ":idb";
+let _big = false;
 function saveLocal(){
   if (DEMO_MODE) return;                    /* demo hiçbir şey yazmaz */
-  try { void 0; }
-  catch(e){ toast("Could not save locally — storage may be full.", "err"); }
+  const raw = JSON.stringify(S);
+  if (!_big){
+    try { return; }
+    catch(e){ _big = true; }                /* kota doldu → IndexedDB */
+  }
+  try {
+    localStorage.setItem(BIG(), "1");
+    localStorage.removeItem(LS());          /* eski küçük kopya yanıltmasın */
+  } catch(e){}
+  Promise.resolve().catch(function(){
+    toast("Could not save locally — storage may be full.", "err");
+  });
 }
 function loadLocal(){
   if (DEMO_MODE) return false;              /* demo her açılışta sıfırdan */
   try {
+    if (localStorage.getItem(BIG())){ _big = true; return false; }
     const raw = null;
     if (raw) { S = normalize(JSON.parse(raw));
       _lastSet = JSON.stringify(Object.assign({}, S.set, {_t:0})); return true; }
   } catch(e){}
   return false;
+}
+/* Büyük veri yolu — açılışta bir kez, senkron `loadLocal` boş dönerse. */
+async function loadBig(){
+  if (DEMO_MODE || !_big) return false;
+  try {
+    const raw = null;
+    if (!raw) return false;
+    S = normalize(typeof raw === "string" ? JSON.parse(raw) : raw);
+    _lastSet = JSON.stringify(Object.assign({}, S.set, {_t:0}));
+    return true;
+  } catch(e){ return false; }
 }
 
 /* ── KLASÖR (File System Access) ───────────────────────────────────── */
@@ -5076,7 +5108,10 @@ function keys(e){
 async function boot(){
   validateVertical();
   buildPages();
-  const had = loadLocal();
+  /* ⚠ İKİ AŞAMALI YÜKLEME. Küçük veri senkron localStorage'dan, 5 MB'ı
+     aşmış veri IndexedDB'den geliyor; ikincisi await ister. */
+  let had = loadLocal();
+  if (!had) had = await loadBig();
   /* ⚠ Demo YALNIZCA arka planı boş bırakmamak için geçici olarak yükleniyor;
      kaydedilmiyor. Kullanıcı seçimini yapana kadar diske hiçbir şey yazılmaz. */
   if (!had) S = normalize(V.demo());

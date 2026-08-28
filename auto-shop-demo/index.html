@@ -133,6 +133,39 @@
   --c1:#A9601C; --c2:#33607E; --c3:#7A5230; --c4:#5E4A78; --c5:#3D6B45; --c6:#A6322C;
 }
 
+/* ⚠ INK — özel ders / eğitim. Mürekkep moru, kâğıt zemini. `steel`
+     kurumsal maviydi; ders defteri için fazla soğuk ve fazla "yazılım"
+     duruyordu. */
+[data-skin="ink"]{
+  --ground:#F6F5FA; --paper:#FFFFFF; --sunk:#EEEDF6;
+  --ink:#14121C;    --ink2:#3D3950;  --muted:#6C6880;
+  --hair:#DEDCE9;   --hair2:#EFEEF6;
+  --accent:#4A3B96; --accent-ink:#FFFFFF; --accent-soft:#EAE7F7;
+  --rail:#FAFAFD;   --rail-ink:#55506B; --rail-active:#4A3B96; --rail-hair:#E2E0EE;
+  --good:#2F6B52;   --good-soft:#E6F1EC;
+  --bad:#A32F45;    --bad-soft:#F9E9EC;
+  --warn:#96620F;   --warn-soft:#FAF0DE;
+  --info:#2C5A8C;   --info-soft:#E8EFF7;
+  --c1:#4A3B96; --c2:#2C5A8C; --c3:#96620F; --c4:#8A3372; --c5:#2F6B52; --c6:#A32F45;
+}
+
+/* ⚠ MEADOW — kreş / çocuk bakımı. Adaçayı zemin, mercan vurgu. `prairie`
+     koyu orman yeşiliydi ve bir kreş panosuna fazla ciddi duruyordu. */
+[data-skin="meadow"]{
+  --ground:#F5F8F4; --paper:#FFFFFF; --sunk:#EBF1E9;
+  --ink:#161A15;    --ink2:#3E4A3C;  --muted:#6B7669;
+  --hair:#DCE5D9;   --hair2:#EFF4ED;
+  --accent:#C25B45; --accent-ink:#FFFFFF; --accent-soft:#FBEBE7;
+  --rail:#FAFCF9;   --rail-ink:#556150; --rail-active:#C25B45; --rail-hair:#E1E9DE;
+  --good:#3B7A55;   --good-soft:#E7F2EB;
+  --bad:#A6322C;    --bad-soft:#F9EAE8;
+  --warn:#9A6512;   --warn-soft:#FAF0DF;
+  --info:#2F6080;   --info-soft:#E8F0F5;
+  --c1:#C25B45; --c2:#2F6080; --c3:#9A6512; --c4:#6B4A82; --c5:#3B7A55; --c6:#A6322C;
+}
+
+
+
 
 
 /* ═══ KABUK + BİLEŞENLER ════════════════════════════════════════════════
@@ -1197,19 +1230,51 @@ function normalize(d){
   return out;
 }
 
+/* ⚠ localStorage'IN 5 MB TAVANI VAR VE SESSİZCE ÇARPILIYOR. Kreş ürünü
+   19.692 kayıtta 5,84 MB veri üretiyor; `setItem` QuotaExceededError
+   atıyor, ekranda bir uyarı çıkıyor ve KULLANICI SAYFAYI YENİLEYİNCE
+   HER ŞEY GİTMİŞ oluyor. Bu tek başına ürünü satılamaz yapardı: veri
+   yıllar içinde büyür, tavan bir gün mutlaka gelir.
+   Çözüm: taşınca IndexedDB'ye düşülüyor (kota yüzlerce MB) ve
+   localStorage'a bir işaret bırakılıyor. Küçük veri hızlı senkron
+   yolda kalıyor; büyük veri açılışta IndexedDB'den geliyor. */
+const BIG = () => LS() + ":idb";
+let _big = false;
 function saveLocal(){
   if (DEMO_MODE) return;                    /* demo hiçbir şey yazmaz */
-  try { void 0; }
-  catch(e){ toast("Could not save locally — storage may be full.", "err"); }
+  const raw = JSON.stringify(S);
+  if (!_big){
+    try { return; }
+    catch(e){ _big = true; }                /* kota doldu → IndexedDB */
+  }
+  try {
+    localStorage.setItem(BIG(), "1");
+    localStorage.removeItem(LS());          /* eski küçük kopya yanıltmasın */
+  } catch(e){}
+  Promise.resolve().catch(function(){
+    toast("Could not save locally — storage may be full.", "err");
+  });
 }
 function loadLocal(){
   if (DEMO_MODE) return false;              /* demo her açılışta sıfırdan */
   try {
+    if (localStorage.getItem(BIG())){ _big = true; return false; }
     const raw = null;
     if (raw) { S = normalize(JSON.parse(raw));
       _lastSet = JSON.stringify(Object.assign({}, S.set, {_t:0})); return true; }
   } catch(e){}
   return false;
+}
+/* Büyük veri yolu — açılışta bir kez, senkron `loadLocal` boş dönerse. */
+async function loadBig(){
+  if (DEMO_MODE || !_big) return false;
+  try {
+    const raw = null;
+    if (!raw) return false;
+    S = normalize(typeof raw === "string" ? JSON.parse(raw) : raw);
+    _lastSet = JSON.stringify(Object.assign({}, S.set, {_t:0}));
+    return true;
+  } catch(e){ return false; }
 }
 
 /* ── KLASÖR (File System Access) ───────────────────────────────────── */
@@ -2082,11 +2147,17 @@ function treemap(items, opts){
       t1.textContent = it.k.length > Math.floor(bw / 7.2)
         ? it.k.slice(0, Math.max(3, Math.floor(bw / 7.2) - 1)) + "…" : it.k;
       s.appendChild(t1);
-      const t2 = sv("text", {x:bx + 10, y:by + 37, fill:"#fff", "font-size":"11",
-        "font-family":"var(--f-num)", opacity:".85"});
-      t2.textContent = (opts.fmt ? opts.fmt(it.v) : num(it.v)) +
-        "  ·  " + Math.round(it.v / tot * 100) + "%";
-      s.appendChild(t2);
+      /* ⚠ DEĞER SATIRI DAR KARODA TAŞIYORDU ("Outdoor e… $3,504" kesik).
+         Başlık kırpılıyordu ama değer satırı kırpılmıyordu. */
+      if (bh > 44){
+        const t2 = sv("text", {x:bx + 10, y:by + 37, fill:"#fff", "font-size":"11",
+          "font-family":"var(--f-num)", opacity:".85"});
+        t2.textContent = bw > 122
+          ? (opts.fmt ? opts.fmt(it.v) : num(it.v)) + "  ·  " +
+            Math.round(it.v / tot * 100) + "%"
+          : Math.round(it.v / tot * 100) + "%";
+        s.appendChild(t2);
+      }
     }
   });
   return s;
@@ -4445,7 +4516,9 @@ const SKINS = [
   {v:"midnight", t:"Midnight", c:["#0A0E14","#F97316","#161D26"]},
   {v:"graphite", t:"Graphite", c:["#0C0E0F","#14B8A6","#1B1E20"]},
   {v:"linen",    t:"Linen",    c:["#FBF8F3","#8C3A46","#F7F4EE"]},
-  {v:"crust",    t:"Crust",    c:["#2A211A","#A9601C","#F8F5EF"]}
+  {v:"crust",    t:"Crust",    c:["#2A211A","#A9601C","#F8F5EF"]},
+  {v:"ink",      t:"Ink",      c:["#FAFAFD","#4A3B96","#F6F5FA"]},
+  {v:"meadow",   t:"Meadow",   c:["#FAFCF9","#C25B45","#F5F8F4"]}
 ];
 
 function setField(f){
@@ -5035,7 +5108,10 @@ function keys(e){
 async function boot(){
   validateVertical();
   buildPages();
-  const had = loadLocal();
+  /* ⚠ İKİ AŞAMALI YÜKLEME. Küçük veri senkron localStorage'dan, 5 MB'ı
+     aşmış veri IndexedDB'den geliyor; ikincisi await ister. */
+  let had = loadLocal();
+  if (!had) had = await loadBig();
   /* ⚠ Demo YALNIZCA arka planı boş bırakmamak için geçici olarak yükleniyor;
      kaydedilmiyor. Kullanıcı seçimini yapana kadar diske hiçbir şey yazılmaz. */
   if (!had) S = normalize(V.demo());
