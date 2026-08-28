@@ -5590,7 +5590,11 @@ function DEMO(){
    "transit","transit","transit","transit","transit","transit","transit",
    "delivered","delivered","delivered","delivered","delivered","delivered"]
    .forEach((st, k) => PLAN.push({st:st, day:-Math.floor(k / 1.7) - 1}));
-  const NLOAD = 430;                                  /* 5 araç × ~9 yük/ay × 12 ay */
+  /* ⚠ 940'A ÇIKARDIM, GERİ ALDIM. Bu yükler ortalama 1.000 mil + deadhead;
+     bir araç haftada en fazla ~2.500 mil yapıyor, yani 2 yük. 940 yük araç
+     başına yılda $460 bin ciro demekti — sektörde araç başına $180-250 bin.
+     Hacim değil, MİL uzun; 430 doğru sayı. */
+  const NLOAD = 430;
   for (let i = 0; i < NLOAD; i++){
     const pu = CITIES[Math.floor(R() * CITIES.length)];
     let dov = CITIES[Math.floor(R() * CITIES.length)];
@@ -5783,7 +5787,7 @@ const V = {
   design:{
     type:"technical", shell:"rail", surface:"card",
     density:"regular", dash:"kpi",
-           charts:{time:"combo", mix:"waterfall", part:"funnel", rank:"hbars",
+           charts:{time:"combo", mix:"stack", part:"funnel", rank:"hbars",
                    side:"hist"} },
   about:"A complete dispatch, invoicing and IFTA system that runs entirely on your own computer. No account, no subscription, no internet connection needed. Pay once, use it forever.",
   aboutNote:"IFTA figures are a worksheet, not a filing. Tax rates are the ones you enter; check them against your base jurisdiction's current table before you file.",

@@ -5438,7 +5438,10 @@ function DEMO(){
     "Fashion":[4, [700, 1600], 3.0, 30], "Band / press":[2.5, [420, 900], 2.4, 18],
     "School":[6, [900, 1800], 1.4, 40]
   };
-  const NS = 196;
+  /* ⚠ ÜÇ FOTOĞRAFÇILI STÜDYO YILDA 196 ÇEKİM YAPMAZ. Düğün + portre karışımı
+     bir stüdyoda 300-340 çekim normal; 196, tek kişilik yarı zamanlı bir işin
+     rakamıydı ve demo yarı boş duruyordu. */
+  const NS = 322;
   for (let i = 0; i < NS; i++){
     const day = -R.int(1, 400);
     const c = R.pick(clients);
@@ -5533,7 +5536,7 @@ function DEMO(){
       ["Kit hire", 4, 60, 320, "Hire company"],
       ["Training", 8, 200, 1200, "Workshops"]
     ]
-  }, 0.32, ["Assistant", "Editing and assisting"]);
+  }, 0.26, ["Assistant", "Editing and assisting"]);
 
   shooters.forEach(s => delete s._desk);
 
@@ -5565,7 +5568,7 @@ const V = {
   skin:"diesel",
   design:{ type:"editorial", shell:"split", surface:"flat",
            density:"relaxed", dash:"hero",
-           charts:{time:"bars", mix:"waterfall", part:"donut", rank:"hbars",
+           charts:{time:"bars", mix:"tree", part:"donut", rank:"hbars",
                    side:"hist"} },
   about:"Shoots, editing time, delivery and money for a photography business — on your own computer. No account, no subscription, no internet needed.",
   dashSub:"What the work actually pays",
