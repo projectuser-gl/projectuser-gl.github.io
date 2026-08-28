@@ -644,6 +644,76 @@ function demoBanner(){
   document.getElementById("view").style.paddingBottom = "62px";
 }
 
+/* ── 07_firstrun.js ── */
+/* ═══ İLK AÇILIŞ ════════════════════════════════════════════════════════
+   ⚠ SESSİZCE DEMO YÜKLEME. Tarayıcı verisi silinmiş bir müşteri uygulamayı
+     açtığında 430 sahte kayıt görüyor ve "verim gitti" diye paniğe kapılıyor.
+     Oysa klasördeki verisi yerinde duruyor. Bu yüzden ilk açılışta SORUYORUZ:
+     örnek veriyle gez · boş başla · daha önce kullandım, verimi bul.
+   ⚠ ELDE KLASÖR TUTAMACI VARSA bunu SÖYLE. IndexedDB duruyor ama
+     localStorage silinmişse (kısmi temizlik) kullanıcının döndüğünü
+     KESİN biliyoruz — o zaman tahmin etmek yerine doğrudan teklif et.    */
+
+async function firstRun(){
+  let hadHandle = false;
+  try { hadHandle = !!(await idbGet("dir")); } catch(e){}
+
+  const card = (icon, title, body, kind, act) => el("button", {
+    class:"nav-item", style:{width:"100%", textAlign:"left", borderLeft:"0",
+      background:"none", color:"var(--ink)", padding:"14px 15px",
+      borderBottom:"1px solid var(--hair2)", alignItems:"flex-start", gap:"12px"},
+    onclick:act}, [
+    el("span", {class:"ic", html:icon, style:{marginTop:"2px",
+      color:"var(--" + kind + ")", flex:"0 0 16px"}}),
+    el("span", {style:{flex:"1", minWidth:"0", display:"flex",
+      flexDirection:"column", gap:"3px"}}, [
+      el("span", {style:{fontWeight:"600", fontSize:"13.5px"}, text:title}),
+      el("span", {class:"sm mut", style:{lineHeight:"1.6", whiteSpace:"normal"},
+        text:body})
+    ])
+  ]);
+
+  const body = el("div", {style:{margin:"-16px"}});
+  if (hadHandle) body.appendChild(el("div", {style:{padding:"13px 16px",
+    display:"flex", gap:"11px", alignItems:"flex-start",
+    background:"var(--warn-soft)", borderBottom:"1px solid var(--hair2)"}}, [
+    el("span", {html:ICON.alert, style:{color:"var(--warn)", flex:"0 0 auto"}}),
+    el("div", {class:"sm", style:{lineHeight:"1.65", color:"var(--ink2)"}}, [
+      el("b", {text:"It looks like you've used this before on this computer."}),
+      el("span", {text:" Your browser's memory of your work was cleared — but if you were saving to a folder, everything is still in it. Pick that folder below and it all comes back."})
+    ])
+  ]));
+
+  if (HAS_FS) body.appendChild(card(ICON.folder,
+    "I've used this before — find my work",
+    "Choose the folder you were saving to. Every record, your company details, your logo and your invoice numbering come back exactly as they were.",
+    "accent", async () => { closeModal(); await pickFolder(); render(); }));
+  else if (HAS_DIR_READ) body.appendChild(card(ICON.folder,
+    "I've used this before — find my work",
+    "Point this at the folder you were saving to and everything comes back.",
+    "accent", () => { closeModal(); pullFromFolderRead(); }));
+
+  body.appendChild(card(ICON.up, "Restore from a backup file",
+    "If you saved a backup file, load it here and pick up exactly where you left off.",
+    "info", () => { closeModal(); importBackup(); }));
+
+  body.appendChild(card(ICON.load, "Show me around with sample data",
+    "A working example business so you can click through every screen before entering anything real. You can clear it whenever you like.",
+    "good", () => { closeModal();
+      S = normalize(V.demo()); saveLocal(); render();
+      toast("This is sample data — clear it from Backup & Sync when you're ready."); }));
+
+  body.appendChild(card(ICON.plus, "Start empty — this is my business",
+    "Begin with nothing in it and enter your own work straight away.",
+    "muted", () => { closeModal();
+      S = normalize(null); saveLocal(); render(); go("settings"); }));
+
+  modal({size:"", dismiss:false, title:"Welcome to " + V.name,
+    sub:hadHandle ? "Let's get your work back"
+                  : "How would you like to start?",
+    body:body});
+}
+
 /* ── 10_core.js ── */
 /* ═══ ÇEKİRDEK ══════════════════════════════════════════════════════════
    ⚠ VERİ CİHAZDA. Sunucu yok, hesap yok. İki katman:
@@ -953,8 +1023,18 @@ async function pickFolder(){
     const d = await window.showDirectoryPicker({ id:APP(), mode:"readwrite" });
     DIR = d; await idbPut("dir", d);
     FILE_NAME = APP() + "-" + deviceName() + ".json";
-    await pushFile(); await pullOthers();
-    paintSync(); toast("Folder connected — your data is backed up here.");
+    /* ⚠ ÖNCE OKU, SONRA YAZ. Tersi çalışıyordu ve gerçek veri kaybettiriyordu:
+       kullanıcı tarayıcı verisini silince uygulama 430 DEMO kaydıyla açılıyor,
+       kurtarmak için klasörü bağlayınca o 430 demo kaydı ONUN KLASÖRÜNE
+       yazılıyordu — yeni cihaz adıyla, yani kalıcı olarak, ve sonraki her
+       cihaza bulaşarak. Artık önce klasördeki gerçek veri okunuyor. */
+    const wasDemo = !!S._meta.demo;
+    await pullOthers();
+    if (!(wasDemo && S._meta.demo)) await pushFile();   /* hâlâ demo ise YAZMA */
+    paintSync();
+    toast(wasDemo && !S._meta.demo
+      ? "Found your data — everything is back."
+      : "Folder connected — your work is saved here from now on.");
   } catch(e){ if (e && e.name !== "AbortError") toast("Could not open that folder.", "err"); }
 }
 async function resumeFolder(){
@@ -3540,6 +3620,8 @@ async function boot(){
   validateVertical();
   buildPages();
   const had = loadLocal();
+  /* ⚠ Demo YALNIZCA arka planı boş bırakmamak için geçici olarak yükleniyor;
+     kaydedilmiyor. Kullanıcı seçimini yapana kadar diske hiçbir şey yazılmaz. */
   if (!had) S = normalize(V.demo());
   document.documentElement.dataset.skin = S.set.skin || V.skin;
   document.title = V.name;
@@ -3552,22 +3634,8 @@ async function boot(){
   render();
   demoBanner();
   if (!had && !DEMO_MODE){
-    saveLocal();
-    setTimeout(() => modal({
-      size:"slim", title:"Welcome — this is sample data",
-      body:el("div", {style:{lineHeight:"1.7"}}, [
-        el("p", {style:{margin:"0 0 10px"}},
-          "The " + W("jobsLower") + ", " + W("clients").toLowerCase() +
-          " and invoices you see are examples, so you can look around a working system."),
-        el("p", {style:{margin:"0 0 10px"}},
-          "When you're ready, open Backup & Sync and choose Erase everything to start with your own business."),
-        el("p", {class:"sm mut", style:{margin:0}},
-          "Nothing you enter leaves this computer.")
-      ]),
-      buttons:["-", {label:"Look around", kind:"pri"}]
-    }), 500);
+    await firstRun();          /* sessizce demo yükleme — SOR */
   }
-  if (!DEMO_MODE) askPersist();
   await resumeFolder();
 }
 
