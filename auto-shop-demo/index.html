@@ -2344,13 +2344,16 @@ function kpiStrip(cards){
         overflow:"hidden", textOverflow:"ellipsis"}, text:c.note}) : null
     ]))));
 }
-function trend(st, kind){
+/* ⚠ YÜKSEKLİK KOMPOZİSYONA GÖRE. İlk ekranda tek grafik varsa 210px yetmiyor:
+   carwash'ta grafik ekranın %13,2'siydi ve pano "boş" ölçülüyordu. */
+function trend(st, kind, h){
   const labels = st.months.map(monthLabel);
+  const ht = h || 210;
   const body = kind === "bars"
-    ? barChart(labels, st.revSeries, {height:210, fmt:money0, color:"var(--c1)", dim:true})
+    ? barChart(labels, st.revSeries, {height:ht, fmt:money0, color:"var(--c1)", dim:true})
     : areaChart(labels, [{data:st.revSeries, color:"var(--c1)"},
                          {data:st.costSeries, color:"var(--c5)"}],
-                {height:210, fmt:money0});
+                {height:ht, fmt:money0});
   const legend = kind === "bars" ? null
     : el("div", {class:"sm", style:{display:"flex", gap:"12px"}}, [
         el("span", {style:{display:"flex", alignItems:"center", gap:"5px"}}, [
@@ -2372,10 +2375,11 @@ function statusData(st){
   return V.job.stages.filter(s => !s.dead).map(s => ({
     k:s.t, v:st.cur.filter(j => j.status === s.v).length, color:s.c}));
 }
-function statusPart(st, kind){
+function statusPart(st, kind, size){
   const d = statusData(st);
   return panel(W("jobs") + " by Status", "this period",
-    kind === "bars" ? hbars(d, {fmt:num}) : donut(d, {label:W("jobs"), size:150}));
+    kind === "bars" ? hbars(d, {fmt:num})
+                    : donut(d, {label:W("jobs"), size:size || 150}));
 }
 function attention(){
   const AL = alerts();
@@ -2449,17 +2453,18 @@ function heroNumber(c, st){
     ]),
     el("div", {style:{flex:"1 1 300px", minWidth:"0"}},
       areaChart(st.months.map(monthLabel), [{data:st.revSeries, color:c.color || "var(--c1)"}],
-        {height:110, left:0, fmt:money0}))
+        {height:190, left:46, fmt:money0}))
   ]));
 }
-function boardPreview(){
+function boardPreview(compact){
   const cols = V.job.stages.filter(s => !s.dead && V.job.open.indexOf(s.v) >= 0);
   const board = el("div", {class:"kb", style:{paddingBottom:"4px"}});
   cols.forEach(s => {
-    const list = rows(V.job.key).filter(j => j.status === s.v).slice(0, 5);
+    const list = rows(V.job.key).filter(j => j.status === s.v).slice(0, 6);
     const all = rows(V.job.key).filter(j => j.status === s.v);
-    const lane = el("div", {class:"kb-list", style:{maxHeight:"260px"}});
-    list.forEach(j => lane.appendChild(el("div", {class:"kb-card",
+    const lane = el("div", {class:"kb-list",
+      style:{maxHeight:compact ? "196px" : "260px"}});
+    list.slice(0, compact ? 3 : 5).forEach(j => lane.appendChild(el("div", {class:"kb-card",
       style:{cursor:"pointer"}, onclick:() => editJob(j)}, [
       el("div", {class:"r1"}, [
         el("span", {class:"ref", text:jobRef(j) || "—"}),
@@ -2488,35 +2493,66 @@ function boardPreview(){
   ]);
 }
 
-/* ── KOMPOZİSYONLAR ────────────────────────────────────────────────── */
+/* Dar sütunda iki grafik — tahta/uyarı yanına görsel ağırlık koymak için. */
+function chartColumn(st){
+  return el("div", {class:"stack"}, [
+    el("div", {class:"panel"}, [
+      el("div", {class:"panel-head"}, el("h2", {text:"Revenue"})),
+      el("div", {class:"panel-body"}, areaChart(st.months.map(monthLabel),
+        [{data:st.revSeries, color:"var(--c1)"}], {height:150, left:46, fmt:money0}))
+    ]),
+    panel(W("jobs") + " by Status", "this period",
+      donut(statusData(st), {label:W("jobs"), size:130}))
+  ]);
+}
+
+/* ── KOMPOZİSYONLAR ──────────────────────────────────────────────────
+   ⚠ HER KOMPOZİSYONUN İLK EKRANINDA GERÇEK GRAFİK OLMALI. Listing görseli
+     bu ekran; KPI kartı ve metinden ibaret pano Etsy'de "boş ve gösterişsiz"
+     duruyor ve ürünü ucuz gösteriyor. Ölçüldü: `board` panosu ilk ekranda
+     SIFIR grafik veriyordu, `focus` %14,6, `hero`nun en büyük grafiği %5,3.
+     `tools/foldcheck.js` kalıcı denetliyor: alan ≥%18, en büyük ≥%7.     */
 const DASH = {
+  /* sayı önce — grafikler hemen altında, ilk ekranda kalacak şekilde */
   kpi:(st, c) => [
-    kpiRow(c, 4),
+    kpiRow(c.slice(0, 4), 4),
     el("div", {class:"grid g23"}, [trend(st), statusPart(st)]),
+    kpiRow(c.slice(4), 4),
     el("div", {class:"grid g32"}, [attention(),
       el("div", {class:"stack"}, [rankClients(st), rankWorkers(st)].filter(Boolean))]),
     recentTable(8)
   ],
+  /* tek büyük sayı + GENİŞ grafik (110px'di, ilk ekranda ağırlık vermiyordu) */
   hero:(st, c) => [
     heroNumber(c[0], st),
-    kpiRow(c.slice(1, 4), 3),
-    el("div", {class:"grid g23"}, [attention(), statusPart(st, "bars")]),
-    el("div", {class:"grid g2"}, [rankClients(st), rankWorkers(st)].filter(Boolean)),
+    el("div", {class:"grid g23"}, [
+      el("div", {class:"stack"}, [kpiRow(c.slice(1, 4), 3), trend(st, "bars")]),
+      statusPart(st)]),
+    el("div", {class:"grid g32"}, [attention(),
+      el("div", {class:"stack"}, [rankClients(st), rankWorkers(st)].filter(Boolean))]),
     recentTable(6)
   ],
+  /* iki sütun — solda iş akışı, sağda GRAFİK sütunu (önce KPI vardı) */
   split:(st, c) => [
     el("div", {class:"grid g23"}, [
-      el("div", {class:"stack"}, [boardPreview(), recentTable(6)]),
-      el("div", {class:"stack"}, [kpiRow(c.slice(0, 4), 1), attention()])
+      el("div", {class:"stack"}, [boardPreview(), kpiRow(c.slice(0, 4), 2)]),
+      chartColumn(st)
     ]),
-    el("div", {class:"grid g2"}, [trend(st), rankClients(st)])
+    el("div", {class:"grid g2"}, [attention(), rankClients(st)]),
+    recentTable(6)
   ],
+  /* tahta önce — ama YANINDA grafik sütunu; eskiden ilk ekranda hiç
+     grafik yoktu ve listing görseli kart yığınından ibaretti */
   board:(st, c) => [
-    boardPreview(),
+    boardPreview(true),
+    el("div", {class:"grid g23"}, [trend(st), statusPart(st)]),
     kpiStrip(c.slice(0, 5)),
-    el("div", {class:"grid g23"}, [attention(), statusPart(st, "bars")]),
-    el("div", {class:"grid g2"}, [trend(st, "bars"), rankWorkers(st) || rankClients(st)])
+    el("div", {class:"grid g32"}, [attention(),
+      el("div", {class:"stack"}, [rankWorkers(st), rankClients(st)].filter(Boolean))]),
+    recentTable(8)
   ],
+
+  /* grafik önce — zaten dolu */
   report:(st, c) => [
     trend(st),
     kpiStrip(c),
@@ -2526,13 +2562,18 @@ const DASH = {
     recentTable(10),
     attention()
   ],
+  /* bugün önce — uyarı listesi metin ağırlıklıydı, yanına geniş grafik */
   focus:(st, c) => [
-    el("div", {class:"grid g32"}, [attention(), boardPreview()]),
-    kpiRow(c.slice(0, 4), 4),
-    el("div", {class:"grid g23"}, [trend(st, "bars"), statusPart(st)]),
+    el("div", {class:"grid g32"}, [attention(), trend(st, null, 300)]),
+    el("div", {class:"grid g23"}, [
+      el("div", {class:"stack"}, [kpiRow(c.slice(0, 4), 2)]),
+      statusPart(st, null, 178)]),
+    boardPreview(true),
+    el("div", {class:"grid g2"}, [rankClients(st), rankWorkers(st)].filter(Boolean)),
     recentTable(6)
   ]
 };
+
 
 function viewDashboard(){
   const st = periodStats(DASH_RANGE);
