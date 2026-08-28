@@ -2118,49 +2118,54 @@ function scatterPlot(points, opts){
   return s;
 }
 
-/* ── Ağaç harita. Payların büyüklük sırası; zaman yok, oran var. ──── */
+/* ── Ağaç harita. Payların büyüklük sırası; zaman yok, oran var. ────
+   ⚠ SVG DEĞİL, HTML. SVG sürümünde viewBox 600 birimdi ve panel 1.240px
+     olunca yazı iki katına çıkıyordu: "Coach pay $12,257" kocaman, çocuk
+     kitabı gibi duruyordu. Kutular yüzdeyle konumlanan div'ler; yazı
+     gerçek CSS yazısı, her genişlikte aynı boyda. */
 function treemap(items, opts){
   opts = opts || {};
   const list = (items || []).filter(x => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 9);
-  if (!list.length) return noData(600, 200, opts.empty);
+  if (!list.length) return noData(600, opts.height || 210, opts.empty);
   const tot = list.reduce((a, x) => a + x.v, 0);
-  const H = opts.height || 210, W = 600;
-  const s = sv("svg", {viewBox:"0 0 " + W + " " + H, width:"100%", height:H,
-    preserveAspectRatio:"none", style:"display:block"});
-  /* ⚠ DİLİMLE-VE-ÇEVİR. Gerçek squarified algoritma bu boyutta fark
-     etmiyor; yön değiştirerek dilimlemek yeterince kare parça veriyor
-     ve uzun ince şeritleri önlüyor. */
-  let x = 0, y = 0, w = W, hh = H, i = 0, rest = tot;
+  const H = opts.height || 210;
+  const box = el("div", {class:"viz", style:{position:"relative", width:"100%",
+    height:H + "px"}});
+  /* dilimle-ve-çevir: uzun ince şeritleri önlemek için yön değiştiriyor */
+  /* ⚠ YÖN KARARI PİKSELDE VERİLİR, YÜZDEDE DEĞİL. Yüzde uzayında %20 genişlik
+     ile %20 yükseklik eşit görünüyor; oysa panel 1.000 × 210 px, yani %1
+     genişlik 10 px, %1 yükseklik 2 px. Yüzdeye bakınca her kutu yatay şerite
+     dönüşüyordu. */
+  const AW = 1000 / 100, AH = H / 100;
+  let x = 0, y = 0, w = 100, h = 100, i = 0, rest = tot;
   list.forEach((it, idx) => {
     const last = idx === list.length - 1;
     const frac = last ? 1 : it.v / rest;
     let bx, by, bw, bh;
-    if (w >= hh){ bw = last ? w : w * frac; bh = hh; bx = x; by = y; x += bw; w -= bw; }
-    else { bh = last ? hh : hh * frac; bw = w; bx = x; by = y; y += bh; hh -= bh; }
+    if (w * AW >= h * AH){ bw = last ? w : w * frac; bh = h; bx = x; by = y; x += bw; w -= bw; }
+    else { bh = last ? h : h * frac; bw = w; bx = x; by = y; y += bh; h -= bh; }
     rest -= it.v;
     const col = it.color || "var(--c" + ((i++ % 6) + 1) + ")";
-    s.appendChild(sv("rect", {x:bx + 1, y:by + 1, width:Math.max(1, bw - 2),
-      height:Math.max(1, bh - 2), rx:3, fill:col, opacity:".92"}));
-    if (bw > 62 && bh > 30){
-      const t1 = sv("text", {x:bx + 10, y:by + 21, fill:"#fff", "font-size":"11.5",
-        "font-family":"var(--f-ui)", "font-weight":"600"});
-      t1.textContent = it.k.length > Math.floor(bw / 7.2)
-        ? it.k.slice(0, Math.max(3, Math.floor(bw / 7.2) - 1)) + "…" : it.k;
-      s.appendChild(t1);
-      /* ⚠ DEĞER SATIRI DAR KARODA TAŞIYORDU ("Outdoor e… $3,504" kesik).
-         Başlık kırpılıyordu ama değer satırı kırpılmıyordu. */
-      if (bh > 44){
-        const t2 = sv("text", {x:bx + 10, y:by + 37, fill:"#fff", "font-size":"11",
-          "font-family":"var(--f-num)", opacity:".85"});
-        t2.textContent = bw > 122
-          ? (opts.fmt ? opts.fmt(it.v) : num(it.v)) + "  ·  " +
-            Math.round(it.v / tot * 100) + "%"
-          : Math.round(it.v / tot * 100) + "%";
-        s.appendChild(t2);
-      }
-    }
+    const px = bw / 100 * 1000, py = bh / 100 * H;   /* kabaca piksel */
+    box.appendChild(el("div", {title:it.k + " — " +
+      (opts.fmt ? opts.fmt(it.v) : num(it.v)),
+      style:{position:"absolute", left:bx + "%", top:by + "%",
+        width:"calc(" + bw + "% - 3px)", height:"calc(" + bh + "% - 3px)",
+        background:col, borderRadius:"3px", overflow:"hidden",
+        padding:"8px 10px", boxSizing:"border-box",
+        display:"flex", flexDirection:"column", gap:"2px",
+        justifyContent:"flex-start"}},
+      px > 74 && py > 30 ? [
+        el("span", {style:{font:"600 11.5px/1.25 var(--f-ui)", color:"#fff",
+          whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"},
+          text:it.k}),
+        py > 48 ? el("span", {class:"mono", style:{fontSize:"11px",
+          color:"#fff", opacity:".85", whiteSpace:"nowrap"},
+          text:(px > 118 ? (opts.fmt ? opts.fmt(it.v) : num(it.v)) + "  ·  " : "") +
+            Math.round(it.v / tot * 100) + "%"}) : null
+      ] : null));
   });
-  return s;
+  return box;
 }
 
 /* ── Dağılım. Tek iş değil, işlerin ŞEKLİ. ────────────────────────── */
