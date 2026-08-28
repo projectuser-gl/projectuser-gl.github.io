@@ -5832,7 +5832,7 @@ function DEMO(){
          nemli ucundan alınıp yine "kuru" diye yazılıyor. Bu vaka
          üretilmezse "ıslak satıldı" uyarısı demoda hiç görünmüyor —
          oysa bu, ocak ayındaki telefonun tek sebebi. */
-      const rushed = R.chance(.014) && (mo >= 10 || mo <= 1);
+      const rushed = R.chance(.038) && (mo >= 10 || mo <= 1);
       const measured = Math.round((mNow + R.bt(-1.4, 1.6) +
         (rushed ? R.bt(3.5, 9.5) : 0)) * 10) / 10;
       const grade = rushed ? "seasoned"
