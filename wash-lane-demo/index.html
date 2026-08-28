@@ -440,6 +440,26 @@ table.dt th{ padding:calc(var(--row) + 1px) 10px }
   .tw{-webkit-overflow-scrolling:touch}
 }
 
+/* ═══ SÜTUN BOŞLUĞU ═════════════════════════════════════════════════════
+   ⚠ IZGARADA KISA SÜTUN ALTINDA BOŞLUK BIRAKIYORDU. `hero` panosunda sol
+     sütun (KPI + grafik) sağdakinden (halka + gösterge) kısa kalınca
+     "Revenue by Month"un altında koca bir boşluk kalıyordu — ekran yarım
+     görünüyor ve listing görselini bozuyor.
+   ⚠ ÇÖZÜM: ızgara hücreleri eşit yükseklikte, grafik paneli kalan yeri
+     DOLDURUYOR. SVG'ye yüzde yükseklik verilebilmesi için kabın flex
+     olması ve `min-height:0` olması şart — yoksa taşıyor.               */
+.grid > .panel,
+.grid > .stack{ height:100%; min-height:0 }
+.stack{ display:flex; flex-direction:column }
+.panel.grow{ flex:1; min-height:0 }
+.panel.chart{ display:flex; flex-direction:column }
+.panel.chart > .panel-body{
+  flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center;
+}
+.panel.chart > .panel-body > svg{ height:100%; min-height:170px; flex:1 }
+/* halka ve gösterge ortalansın, gerilmesin */
+.panel.chart.fixed > .panel-body > svg{ flex:0 0 auto; height:auto }
+
 /* ═══ BİLEŞENLER ════════════════════════════════════════════════════════ */
 
 /* ── PANEL ─────────────────────────────────────────────────────────── */
@@ -1752,6 +1772,17 @@ function sparkGrid(items, opts){
 
 let SORT = {};       /* modül başına {k, dir} */
 let QUERY = {};      /* modül başına arama metni */
+let SHOWN = {};      /* modül başına kaç satır çizildi */
+
+/* ⚠ TABLO TÜM SATIRLARI ÇİZMİYOR — ÇİZEMEZ. Salon demosunda 9.817
+   randevu vardı ve sayfa iki DAKİKADAN uzun sürede açılıyordu; ölçüm
+   betiği bile zaman aşımına uğradı. Bu demo sorunu değil: üç yıl veri
+   biriken her müşteri aynı duvara çarpar ve ürünü "donuyor" diye iade
+   eder. İlk PAGE_ROWS satır çiziliyor, altta "N / M" ve daha fazlasını
+   getiren düğmeler var.
+   ⚠ TOPLAM SATIRI TÜM EŞLEŞENLERİ sayar, ekrandakini değil — yoksa
+   kullanıcı yanlış toplam görür. */
+const PAGE_ROWS = 150;
 
 /* ── Sütun türleri. cls: hizalama sınıfı, get: değer, show: hücre içeriği */
 const CELL = {
@@ -1824,7 +1855,7 @@ function dataTable(cfg){
         SORT[id] = (cur && cur.k === c.k)
           ? {k:c.k, dir:cur.dir === "asc" ? "desc" : "asc"}
           : {k:c.k, dir:(c.type === "money" || c.type === "num" || c.type === "date") ? "desc" : "asc"};
-        cfg.repaint();
+        SHOWN[id] = 0; cfg.repaint();
       }
     }, [c.h, c.sortable === false ? null : el("span", {class:"ar", text:"▲"})]));
   });
@@ -1833,8 +1864,10 @@ function dataTable(cfg){
   tbl.appendChild(el("thead", {}, trh));
 
   /* gövde */
+  const limit = SHOWN[id] || PAGE_ROWS;
+  const shown = list.length > limit ? list.slice(0, limit) : list;
   const tb = el("tbody");
-  list.forEach(r => {
+  shown.forEach(r => {
     const tr = el("tr", cfg.onEdit ? {ondblclick: () => cfg.onEdit(r), style:{cursor:"pointer"}} : {});
     cols.forEach(c => {
       const t = CELL[c.type] || CELL.text;
@@ -1874,6 +1907,23 @@ function dataTable(cfg){
     tbl.appendChild(el("tfoot", {}, tf));
   }
 
+  /* ── daha fazlasını getir ── */
+  const more = list.length - shown.length;
+  const moreBar = more > 0 ? el("div", {style:{display:"flex", gap:"9px",
+    alignItems:"center", flexWrap:"wrap", padding:"11px 12px",
+    borderTop:"1px solid var(--hair)", background:"var(--sunk)"}}, [
+    el("span", {class:"sm mut"},
+      "Showing " + num(shown.length) + " of " + num(list.length) + " — "
+      + num(more) + " more"),
+    el("div", {style:{flex:"1"}}),
+    el("button", {class:"btn sm", text:"Show " + num(Math.min(more, PAGE_ROWS * 4)) + " more",
+      onclick:() => { SHOWN[id] = limit + PAGE_ROWS * 4; cfg.repaint(); }}),
+    more <= 4000 ? el("button", {class:"btn sm ghost", text:"Show all",
+      onclick:() => { SHOWN[id] = list.length; cfg.repaint(); }}) : null,
+    el("span", {class:"sm mut", style:{flexBasis:"100%"}},
+      "Totals below count every matching row, not just the ones on screen.")
+  ]) : null;
+
   if (!list.length){
     return el("div", {}, cfg.empty || el("div", {class:"empty"}, [
       el("div", {html:ICON.search}),
@@ -1882,7 +1932,11 @@ function dataTable(cfg){
                        : "Records you add will appear in this table."})
     ]));
   }
-  return el("div", {class:"tw"}, tbl);
+  return moreBar
+    ? el("div", {style:{display:"flex", flexDirection:"column", minHeight:"0",
+        height:"100%"}}, [
+        el("div", {class:"tw", style:{flex:"1", minHeight:"0"}}, tbl), moreBar])
+    : el("div", {class:"tw"}, tbl);
 }
 
 /* ── ARAÇ ÇUBUĞU ───────────────────────────────────────────────────── */
@@ -2272,6 +2326,20 @@ const AUTO_BROWSERS = "Google Chrome, Microsoft Edge, Brave, Opera or Vivaldi";
 
 const n0 = v => Number(v) || 0;
 
+/* ═══ ÇİZİM ÖNBELLEĞİ ═══════════════════════════════════════════════════
+   ⚠ ÖLÇÜLDÜ: salon demosunda müşteri tablosu AÇILMIYORDU. Sebep O(n²):
+     `lapsedClients()` tüm müşteri × tüm randevu tarıyor ve tablo bunu HER
+     SATIRIN hücresinde yeniden çağırıyordu — 1.180 satır × 11,6 milyon
+     işlem. Sayfa iki dakikada açılmadı, ölçüm betiği bile düştü.
+   ⚠ Önbellek HER render()'da temizleniyor; veri değişince bayat sonuç
+     kalmıyor. Ağır bir türetilmiş değeri `memo("ad", fn)` ile sar. */
+let _MEMO = {};
+function memo(key, fn){
+  if (!(key in _MEMO)) _MEMO[key] = fn();
+  return _MEMO[key];
+}
+function memoClear(){ _MEMO = {}; }
+
 const CK = () => V.job.clientKey;
 const CE = () => V.job.clientEntity;
 
@@ -2348,9 +2416,23 @@ function workerPay(w, list){
 function nextInvoiceNo(){
   return (S.set.invoicePrefix || "INV-") + (n0(S.set.nextInvoice) || 1001);
 }
+/* ⚠ FATURA → İŞ İNDEKSİ. Eskiden her fatura için TÜM iş kayıtları
+   taranıyordu: salonda 10.000 fatura × 11.771 randevu = 117 milyon işlem,
+   fatura sayfası 3,8 saniyede açılıyordu. Tek geçişte indeks kuruluyor,
+   her çizimde bir kez. */
+function invoiceIndex(){
+  return memo("core:invJobs", function(){
+    const ix = {};
+    rows(V.job.key).forEach(j => {
+      if (!j.invoiceId) return;
+      (ix[j.invoiceId] || (ix[j.invoiceId] = [])).push(j);
+    });
+    return ix;
+  });
+}
 function invoiceTotal(inv){
-  return rows(V.job.key).filter(j => j.invoiceId === inv.id)
-    .reduce((a, j) => a + jobValue(j), 0) - n0(inv.discount) + n0(inv.extra);
+  const js = invoiceIndex()[inv.id] || [];
+  return js.reduce((a, j) => a + jobValue(j), 0) - n0(inv.discount) + n0(inv.extra);
 }
 function invoiceDue(inv){
   const days = {"Net 15":15, "Net 30":30, "Net 45":45, "Net 60":60,
@@ -2478,8 +2560,8 @@ function periodStats(days){
 }
 
 /* ── WIDGET DAĞARCIĞI ──────────────────────────────────────────────── */
-function panel(title, hint, body, flush){
-  return el("div", {class:"panel"}, [
+function panel(title, hint, body, flush, cls){
+  return el("div", {class:"panel" + (cls ? " " + cls : "")}, [
     title ? el("div", {class:"panel-head"}, [
       el("h2", {text:title}),
       hint ? el("div", {class:"sp"}) : null,
@@ -2529,7 +2611,7 @@ function trend(st, kind, h){
           el("i", {style:{width:"9px",height:"9px",borderRadius:"2px",background:"var(--c5)"}}),
           el("span", {class:"mut", text:"Costs"})])
       ]);
-  return el("div", {class:"panel"}, [
+  return el("div", {class:"panel chart grow"}, [
     el("div", {class:"panel-head"}, [
       el("h2", {text:kind === "bars" ? "Revenue by Month" : "Revenue vs Costs"}),
       el("div", {class:"sp"}), legend
@@ -2545,7 +2627,8 @@ function statusPart(st, kind, size){
   const d = statusData(st);
   return panel(W("jobs") + " by Status", "this period",
     kind === "bars" ? hbars(d, {fmt:num})
-                    : donut(d, {label:W("jobs"), size:size || 150}));
+                    : donut(d, {label:W("jobs"), size:size || 150}),
+    false, "chart fixed grow");
 }
 function attention(){
   const AL = alerts();
@@ -2575,7 +2658,8 @@ function attention(){
 function rankClients(st){
   const d = topN(sumBy(st.cur, j => j[CK()], j => jobValue(j)), 6, clientName);
   return panel("Top " + W("clients"), null,
-    d.length ? hbars(d, {fmt:money0}) : noData(300, 110, "No revenue in this period"));
+    d.length ? hbars(d, {fmt:money0}) : noData(300, 110, "No revenue in this period"),
+    false, "grow");
 }
 function rankWorkers(st){
   const wf = V.job.workerEntity ? V.entities[V.job.workerEntity].jobField : null;
@@ -2584,7 +2668,8 @@ function rankWorkers(st){
     id => nameOf(V.job.workerEntity, id));
   return panel("Revenue by " + W("worker"), null,
     d.length ? hbars(d, {fmt:money0})
-             : noData(300, 110, "No " + W("worker").toLowerCase() + " assigned yet"));
+             : noData(300, 110, "No " + W("worker").toLowerCase() + " assigned yet"),
+    false, "grow");
 }
 function recentTable(n){
   const recent = rows(V.job.key).slice()
@@ -2602,9 +2687,10 @@ function recentTable(n){
   ]);
 }
 function heroNumber(c, st){
-  return el("div", {class:"panel"}, el("div", {class:"panel-body",
-    style:{display:"flex", gap:"22px", alignItems:"flex-end", flexWrap:"wrap"}}, [
-    el("div", {style:{flex:"1 1 240px", minWidth:"0"}}, [
+  return el("div", {class:"panel chart"}, el("div", {class:"panel-body",
+    style:{display:"flex", gap:"22px", alignItems:"center", flexWrap:"wrap",
+           flexDirection:"row"}}, [
+    el("div", {style:{flex:"1 1 240px", minWidth:"0", alignSelf:"center"}}, [
       el("div", {class:"kpi-label", style:{marginBottom:"5px"}, text:c.label}),
       el("div", {style:{font:"600 clamp(34px,5vw,52px)/1 var(--f-display)",
         fontVariantNumeric:"tabular-nums", letterSpacing:"-.02em",
@@ -2673,7 +2759,7 @@ function costMix(st){
     .sort((a, b) => b.tot - a.tot).slice(0, 5);
   const series = top.map((t, i) => ({color:"var(--c" + ((i % 6) + 1) + ")",
     data:st.months.map(mk => t.m[mk] || 0)}));
-  return el("div", {class:"panel"}, [
+  return el("div", {class:"panel chart grow"}, [
     el("div", {class:"panel-head"}, [
       el("h2", {text:"Where the Money Goes"}), el("div", {class:"sp"}),
       el("div", {class:"sm", style:{display:"flex", gap:"10px", flexWrap:"wrap"}},
@@ -2699,7 +2785,7 @@ function marginGauge(st){
         text:pct(m, 1), label:"margin"}),
       el("div", {class:"sm mut", style:{textAlign:"center", marginTop:"9px"},
         text:money0(st.rev) + " in · " + money0(st.rev - st.profit) + " out"})
-    ]));
+    ]), false, "chart fixed grow");
 }
 
 /* Aylık kırılım kıvılcımları — çok sayıda seriyi az yerde. */
@@ -2930,8 +3016,12 @@ function viewBoard(){
     const list = rows(V.job.key).filter(j => j.status === s.v)
       .sort((a, b) => String(jobStart(a) || "").localeCompare(String(jobStart(b) || "")));
     const total = list.reduce((a, j) => a + jobValue(j), 0);
+    /* ⚠ SÜTUN BAŞINA KART SINIRI. Salon demosunda "Paid" sütununda binlerce
+       kart vardı ve tahta 2,2 saniyede çiziliyordu — üstelik o kadar kartı
+       kimse sürüklemiyor. Sütunda en yeni CARD_CAP tanesi duruyor. */
+    const CARD_CAP = 60;
     const lane = el("div", {class:"kb-list"});
-    list.forEach(j => lane.appendChild(el("div", {class:"kb-card", draggable:"true",
+    list.slice(0, CARD_CAP).forEach(j => lane.appendChild(el("div", {class:"kb-card", draggable:"true",
       onclick:() => editJob(j),
       ondragstart:e => { DRAG = j.id; e.currentTarget.classList.add("drag");
                          e.dataTransfer.effectAllowed = "move"; },
@@ -2953,6 +3043,10 @@ function viewBoard(){
     if (!list.length) lane.appendChild(el("div", {class:"sm mut",
       style:{padding:"14px 6px", textAlign:"center"},
       text:"Drop " + W("jobsLower") + " here"}));
+    else if (list.length > CARD_CAP) lane.appendChild(el("button", {class:"btn sm ghost",
+      style:{margin:"4px", width:"calc(100% - 8px)"},
+      text:num(list.length - CARD_CAP) + " more — open the list",
+      onclick:() => go(V.job.key)}));
     board.appendChild(el("div", {class:"kb-col",
       ondragover:e => { e.preventDefault(); e.currentTarget.classList.add("drop"); },
       ondragleave:e => e.currentTarget.classList.remove("drop"),
@@ -3077,7 +3171,7 @@ function uninvoicedJobs(clientId){
     !j.invoiceId && isRevenue(j) && j[CK()] === clientId &&
     V.job.billable.indexOf(j.status) >= 0);
 }
-function invoiceJobs(inv){ return rows(JK()).filter(j => j.invoiceId === inv.id); }
+function invoiceJobs(inv){ return invoiceIndex()[inv.id] || []; }
 
 function newInvoice(){
   const brokers = rows(CE());
@@ -4102,7 +4196,7 @@ function buildPages(){
   Object.keys(V.counts || {}).forEach(k => { COUNTS[k] = V.counts[k]; });
 }
 
-function go(p){ if (PAGES[p]){ PAGE = p; SORT = {}; render(); } }
+function go(p){ if (PAGES[p]){ PAGE = p; SORT = {}; SHOWN = {}; render(); } }
 
 function buildNav(){
   const nav = $("#nav"); nav.innerHTML = "";
@@ -4141,6 +4235,7 @@ function paintSync(needsPermission){
 }
 
 function render(){
+  memoClear();          /* ağır türetilmiş değerler her çizimde bir kez */
   document.documentElement.dataset.skin = S.set.skin || V.skin;
   applyFavicon();
   const p = PAGES[PAGE] || PAGES.dash;
@@ -4280,6 +4375,22 @@ function expenseBook(R, revByMonth, spec, target, balanceAs){
                 vendor:balanceAs[1] || ""});
   });
   return out;
+}
+
+/* ═══ DEMO İÇİNDE AYARLARI GEÇİCİ OLARAK KUR ════════════════════════════
+   ⚠ BU TUZAĞA İKİ KEZ DÜŞTÜK. Alan fonksiyonlarının çoğu `S.set`'ten
+     okuyor (gün ücreti, vergi oranı, servis malzemesi yüzdesi...). Ama
+     `DEMO()` henüz S'e yazmadığı için o değerler UNDEFINED → 0 dönüyor:
+       · electrical: gün ücretli işler ciroya 0 yazıldı, giderler eksik
+         üretildi, net marj %16 hedeflenirken %27 çıktı
+       · autoshop: vergi ve servis malzemesi 0 sayıldı
+     Çözüm: demo ayarlarını ÖNCE kur, hesabı onunla yap, sonra geri al.
+   ⚠ Aynı sebeple demo içinde `rows()` / `byId()` de kullanma — S boş. */
+function withSettings(set, fn){
+  const prev = S.set;
+  S.set = Object.assign({}, DEFAULT_SET, set);
+  try { return fn(); }
+  finally { S.set = prev; }
 }
 
 /* Aylık ciro haritası — expenseBook'un girdisi. */
