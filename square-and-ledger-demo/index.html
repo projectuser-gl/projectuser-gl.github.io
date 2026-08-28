@@ -5523,7 +5523,10 @@ function DEMO(){
   let ref = 4100;
   /* ⚠ Tarihler eşit dağıtılıyor: 12 aylık grafikte boş ay kalmasın. */
   for (let i = 0; i < 138; i++){
-    const startDay = -Math.round(8 + (i * 384) / 138) - R.int(0, 3);
+    /* ⚠ İLERİYE DE İŞ OLMALI. Yayılım -8'den başlayınca "planlandı" ve
+       "çatıda" aşamaları hiç oluşmuyordu; timeshift bir yıl sonra açık iş
+       kalmadığını yakaladı. Yayılım +18 günden geriye. */
+    const startDay = 18 - Math.round((i * 402) / 138) - R.int(0, 3);
     const cover = pickCover();
     const spec = COVER[cover];
     const repair = cover === "Repair only";
@@ -5553,9 +5556,11 @@ function DEMO(){
     const dump = (kind === "tearoff" || kind === "storm")
       ? Math.round(sq * R.bt(7, 13)) : repair ? R.int(0, 60) : 0;
     const days = Math.max(1, Math.round((lay + tear) / (crew.size * 8)));
-    const st = startDay > -2 ? R.pick(["scheduled","onroof"])
-      : startDay > -8 ? R.pick(["onroof","done","invoiced"])
-      : startDay > -30 ? R.pick(["invoiced","paid","paid"])
+    const st = startDay > 9 ? R.pick(["quoted","quoted","sold"])
+      : startDay > 1 ? R.pick(["sold","scheduled","scheduled"])
+      : startDay > -4 ? R.pick(["scheduled","onroof","onroof"])
+      : startDay > -10 ? R.pick(["onroof","done","invoiced"])
+      : startDay > -32 ? R.pick(["invoiced","paid","paid"])
       : "paid";
     const permitNeeded = !repair && R.chance(.62);
     jobs.push({id:id(), ref:String(ref++), status:st,
