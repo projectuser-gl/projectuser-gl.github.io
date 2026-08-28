@@ -2174,7 +2174,14 @@ function histogram(values, opts){
   const vals = (values || []).filter(v => isFinite(v) && v > 0);
   const h = opts.height || 200, W = 720, P = {t:12, r:12, b:34, l:opts.left || 46};
   if (vals.length < 3) return noData(W, h, opts.empty || "Not enough records yet");
-  const mx = niceMax(Math.max.apply(null, vals));
+  /* ⚠ AYKIRI DEĞER EKSENİ YUTUYOR. Çekicide birkaç ağır kurtarma 5.000$;
+     eksen oraya kadar uzayınca 1.000 çağrının hepsi tek çubuğa sıkışıyor
+     ve grafik hiçbir şey anlatmıyordu. Eksen %95'lik dilimde kesiliyor,
+     üstündekiler son kovaya yığılıyor (standart yöntem). */
+  const asc = vals.slice().sort((a, b) => a - b);
+  const p95 = asc[Math.min(asc.length - 1, Math.floor(asc.length * 0.95))];
+  const clipped = vals.filter(v => v > p95).length;
+  const mx = niceMax(p95);
   const bins = opts.bins || 14, bw = mx / bins;
   const counts = new Array(bins).fill(0);
   vals.forEach(v => { const i = Math.min(bins - 1, Math.floor(v / bw)); counts[i]++; });
@@ -2191,8 +2198,7 @@ function histogram(values, opts){
     s.appendChild(t);
   }
   /* medyan çizgisi — ortalamadan daha dürüst, tek büyük iş kaydırmıyor */
-  const sorted = vals.slice().sort((a, b) => a - b);
-  const med = sorted[Math.floor(sorted.length / 2)];
+  const med = asc[Math.floor(asc.length / 2)];
   counts.forEach((c, i) => {
     const bx = P.l + (iw / bins) * i;
     const bh = (c / cmx) * ih;
@@ -2220,6 +2226,14 @@ function histogram(values, opts){
       fill:"var(--muted)", "font-size":"10", "font-family":"var(--f-num)"});
     t.textContent = opts.fmt ? opts.fmt(v) : num(v);
     s.appendChild(t);
+  }
+  /* kesilen kuyruğu SÖYLE — sessizce kırpmak grafiği yalancı yapar */
+  if (clipped){
+    const c = sv("text", {x:W - P.r, y:P.t + 10, "text-anchor":"end",
+      fill:"var(--muted)", "font-size":"10", "font-family":"var(--f-ui)"});
+    c.textContent = clipped + " above " + (opts.fmt ? opts.fmt(mx) : num(mx)) +
+      " in the last bar";
+    s.appendChild(c);
   }
   return s;
 }
@@ -5384,8 +5398,12 @@ function avgCall(from, to){
   const cs = callsIn(from, to);
   return cs.length ? cs.reduce((a, c) => a + callValue(c), 0) / cs.length : 0;
 }
+/* ⚠ ORAN YALNIZ ÇEKME İŞLERİNDE ANLAMLI. Akü takviyesi, kilit açma ve
+   lastik değişimi hiç yüklü mil üretmiyor; onları paydaya katınca oran
+   %37'ye düşüyor ve gösterge kalıcı olarak kırmızı yanıyordu — oysa
+   çekme işlerinde oran %52 ile bandın içinde. */
 function loadedPctOverall(from, to){
-  const cs = callsIn(from, to);
+  const cs = callsIn(from, to).filter(c => loadedMiles(c) > 0);
   const t = cs.reduce((a, c) => a + totalMiles(c), 0);
   return t ? cs.reduce((a, c) => a + loadedMiles(c), 0) / t * 100 : 0;
 }
@@ -5643,7 +5661,10 @@ function DEMO(){
       const mins = Math.round(R.bt(spec.mins[0], spec.mins[1]) / 5) * 5;
       const lm = spec.lm[1] ? Math.round(R.bt(spec.lm[0], spec.lm[1])) : 0;
       /* ⚠ BOŞ MİL: olay yerine gidiş + üsse dönüş. */
-      const dm = Math.round(R.bt(6, 34) + lm * R.bt(.25, .7));
+      /* Ölçüldü: bu katsayılarla yüklü mil oranı %44 çıkıyordu, yani
+         göstergenin kendi eşiğinin (%45) hemen altında ve sürekli
+         kırmızı. Yerel işte boş mil yüklünün %20-55'i kadar. */
+      const dm = Math.round(R.bt(4, 22) + lm * R.bt(.2, .55));
       /* ücret: hesap varsa sözleşme fiyatı, yoksa perakende */
       let hook, mileage;
       if (acct){
@@ -5986,7 +6007,7 @@ const V = {
       /* ⚠ Ödenmeyen kilometre. */
       {label:"Loaded Miles", value:lp ? pct(lp, 0) : "—",
        color:lp < 45 ? "var(--bad)" : "var(--c5)",
-       note:"of every mile driven · under 45% and the job is losing"},
+       note:"on tow jobs · under 45% and the job is losing money"},
       {label:"In the Yard", value:num(yard.length),
        color:longs ? "var(--warn)" : "var(--c2)",
        note:money0(owed) + " of storage accrued · " + longs + " over 30 days"},
