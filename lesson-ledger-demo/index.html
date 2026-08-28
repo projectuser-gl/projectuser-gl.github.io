@@ -5401,8 +5401,12 @@ function DEMO(){
       _perWeek:R.chance(.22) ? 2 : 1,
       _usesPkg:R.chance(.72),
       _reliability:R.bt(.78, .99),
-      _startDay:-R.int(20, 400),
-      _endDay:R.chance(.24) ? -R.int(1, 200) : 40});
+      /* ⚠ HERKES AYNI ANDA BAŞLAMIYOR AMA HEPSİ YENİ DE DEĞİL. Düzgün
+         dağıtılmış başlangıç tarihi, bir yıl önce cirosu sıfır olan bir
+         iş üretiyordu; alıcı bunu "yeni kurulmuş" diye okuyor. Öğrenci-
+         lerin üçte ikisi eski, kalanı dönem içinde katılıyor. */
+      _startDay:R.chance(.68) ? -R.int(260, 400) : -R.int(30, 250),
+      _endDay:R.chance(.24) ? -R.int(1, 200) : 21});
   }
 
   /* ── Dönem takvimi: tatiller ve sınav tepesi ── */
@@ -5431,13 +5435,13 @@ function DEMO(){
     const subj = R.pick(SUB_BY_TUTOR[tIdx]);
     const base = LEVEL_PRICE[s.level] || 50;
     let openPkg = null;
-    for (let day = s._startDay; day <= Math.min(s._endDay, 35); day += 7){
+    for (let day = s._startDay; day <= Math.min(s._endDay, 21); day += 7){
       const tf = termFactor(D(day));
       const times = s._perWeek;
       for (let k = 0; k < times; k++){
         if (!R.chance(Math.min(.97, tf))) continue;
         const dayOff = day + R.int(0, 6);
-        if (dayOff > 35) continue;
+        if (dayOff > 21) continue;
         const d = D(dayOff);
         /* paket lazımsa satın al */
         let pkgId = "";
