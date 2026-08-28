@@ -101,6 +101,23 @@
   --shadow-lg:0 4px 12px rgba(0,0,0,.45), 0 12px 32px rgba(0,0,0,.4);
 }
 
+/* ⚠ LINEN — catering. Sıcak keten zemini, koyu şarap vurgusu. Altı palet
+     on üç üründe tekrar etmeye başlamıştı; menü kartı gibi okunan bir
+     yüzey için gri-yeşil ve çelik yanlış tondu. */
+[data-skin="linen"]{
+  --ground:#F7F4EE; --paper:#FFFFFF; --sunk:#F0EBE1;
+  --ink:#1A1512;    --ink2:#4A3F36;  --muted:#7A6E62;
+  --hair:#E3DCD0;   --hair2:#F2EDE4;
+  --accent:#8C3A46; --accent-ink:#FFFFFF; --accent-soft:#F6E9EA;
+  --rail:#FBF8F3;   --rail-ink:#5C5045; --rail-active:#8C3A46; --rail-hair:#E6DFD3;
+  --good:#3F6B4A;   --good-soft:#E9F1EA;
+  --bad:#A8322F;    --bad-soft:#F9EAE9;
+  --warn:#9A6512;   --warn-soft:#FAF0DF;
+  --info:#2C5F7C;   --info-soft:#E8F0F5;
+  --c1:#8C3A46; --c2:#2C5F7C; --c3:#9A6512; --c4:#5E4A78; --c5:#3F6B4A; --c6:#A8322F;
+}
+
+
 /* ═══ KABUK + BİLEŞENLER ════════════════════════════════════════════════
    ⚠ ARALIK LAYOUT'TAN GELİR. Kardeş grupları flex/grid + gap ile diz;
      eleman başına margin verme (sessizce çakışıyor ya da ikiye katlanıyor).
@@ -1763,6 +1780,566 @@ function sparkGrid(items, opts){
   return box;
 }
 
+/* ── 13b_charts2.js ── */
+/* ═══ GRAFİK İSKELETLERİ — İKİNCİ TAKIM ═════════════════════════════════
+   ⚠ NEDEN VAR. On üç üründe pano hep aynı beş iskeleti kullanıyordu:
+     alan grafiği + halka + yığılmış çubuk + gösterge + yatay çubuk.
+     Kompozisyon (hangi kutu nerede) değişiyordu ama ÇİZİM AYNIYDI, ve
+     ürünler ilk bakışta birbirinin kopyası gibi duruyordu. Renk paleti
+     bunu çözmez — göz iskeleti tanıyor.
+   ⚠ HER İSKELET FARKLI BİR SORUYA CEVAP VERİR, süs değildir:
+       ısı ızgarası  → iş ne zaman geliyor (mevsim/gün deseni)
+       şelale        → cirodan kâra giden yol, kalem kalem
+       huni          → aşamalar arası kayıp
+       kurşun çubuk  → hedefe göre nerede duruyoruz
+       serpme        → iki sayı arasındaki ilişki (büyük iş = kârlı mı?)
+       ağaç harita   → payların BÜYÜKLÜK sıralaması, zaman değil
+       dağılım       → tek iş değil, işlerin şekli
+       eğim          → bu dönem vs geçen dönem, kalem bazında
+   ⚠ HEPSİ CSS DEĞİŞKENİNDEN RENK OKUR; tema değişince grafik de değişir.  */
+
+/* ── Isı ızgarası. Satır × sütun yoğunluk. Mevsim/gün deseni. ─────── */
+function heatGrid(rowLabels, colLabels, matrix, opts){
+  opts = opts || {};
+  if (!rowLabels.length || !colLabels.length) return noData(600, 160);
+  let mx = 0;
+  matrix.forEach(r => r.forEach(v => { if (v > mx) mx = v; }));
+  if (!mx) return noData(600, 160, opts.empty || "Nothing logged yet");
+  const cell = el("div", {style:{display:"grid", gap:"3px",
+    gridTemplateColumns:"minmax(58px,auto) repeat(" + colLabels.length + ",1fr)",
+    alignItems:"center"}});
+  /* başlık satırı */
+  cell.appendChild(el("div", {}));
+  colLabels.forEach(c => cell.appendChild(el("div", {class:"sm mut",
+    style:{textAlign:"center", fontSize:"9.5px", whiteSpace:"nowrap",
+      overflow:"hidden", textOverflow:"ellipsis"}, text:c})));
+  rowLabels.forEach((rl, ri) => {
+    cell.appendChild(el("div", {class:"sm mut", style:{fontSize:"10.5px",
+      whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+      paddingRight:"6px"}, text:rl}));
+    colLabels.forEach((cl, ci) => {
+      const v = (matrix[ri] || [])[ci] || 0;
+      const t = v / mx;
+      cell.appendChild(el("div", {
+        title:rl + " · " + cl + " — " + (opts.fmt ? opts.fmt(v) : num(v)),
+        style:{height:(opts.cell || 26) + "px", borderRadius:"3px",
+          background:v ? (opts.color || "var(--accent)") : "var(--sunk)",
+          /* ⚠ Doğrusal opaklık en yoğun hücreyi tek başına bırakıyordu;
+             karekök ölçek orta değerleri de görünür kılıyor. */
+          opacity:v ? (0.14 + Math.sqrt(t) * 0.86).toFixed(3) : 1,
+          display:"flex", alignItems:"center", justifyContent:"center"}},
+        opts.showValue && v ? el("span", {class:"mono", style:{fontSize:"9.5px",
+          color:t > .55 ? "var(--accent-ink)" : "var(--ink2)"},
+          text:opts.fmt ? opts.fmt(v) : num(v)}) : null));
+    });
+  });
+  const legend = el("div", {style:{display:"flex", alignItems:"center", gap:"6px",
+    marginTop:"10px", justifyContent:"flex-end"}}, [
+    el("span", {class:"sm mut", style:{fontSize:"10px"}, text:"less"}),
+    el("div", {style:{display:"flex", gap:"2px"}},
+      [0.16, 0.36, 0.56, 0.78, 1].map(o => el("i", {style:{width:"14px", height:"10px",
+        borderRadius:"2px", background:opts.color || "var(--accent)", opacity:String(o)}}))),
+    el("span", {class:"sm mut", style:{fontSize:"10px"},
+      text:opts.fmt ? opts.fmt(mx) : num(mx)})
+  ]);
+  return el("div", {class:"viz"}, [cell, legend]);
+}
+
+/* ── Şelale. Cirodan kâra giden yol; her kalem bir basamak. ───────── */
+function waterfall(items, opts){
+  opts = opts || {};
+  const h = opts.height || 220, W = 720, P = {t:14, r:12, b:46, l:opts.left || 62};
+  if (!items || !items.length) return noData(W, h);
+  /* kümülatif taban ve tavan */
+  let run = 0, lo = 0, hi = 0;
+  const steps = items.map(it => {
+    const start = it.total ? 0 : run;
+    const end = it.total ? it.v : run + it.v;
+    /* ⚠ TOPLAM KALEMİ DE BİRİKİMİ TAŞIR. Taşımayınca "Revenue" basamağından
+       sonraki gider sıfırdan aşağı iniyordu ve şelale ters okunuyordu. */
+    run = it.total ? it.v : run + it.v;
+    lo = Math.min(lo, start, end); hi = Math.max(hi, start, end);
+    return {k:it.k, v:it.v, start:start, end:end, total:!!it.total, color:it.color};
+  });
+  const span = (hi - lo) || 1;
+  const iw = W - P.l - P.r, ih = h - P.t - P.b;
+  const Y = v => P.t + ih - ((v - lo) / span) * ih;
+  const s = sv("svg", {viewBox:"0 0 " + W + " " + h, width:"100%", height:h,
+    preserveAspectRatio:"none", style:"display:block"});
+  for (let i = 0; i <= 3; i++){
+    const y = P.t + (ih / 3) * i, v = hi - (span / 3) * i;
+    s.appendChild(sv("line", {x1:P.l, y1:y, x2:W - P.r, y2:y, stroke:"var(--hair2)"}));
+    const t = sv("text", {x:P.l - 8, y:y + 3.5, "text-anchor":"end",
+      fill:"var(--muted)", "font-size":"10", "font-family":"var(--f-num)"});
+    t.textContent = opts.fmt ? opts.fmt(v) : num(v);
+    s.appendChild(t);
+  }
+  const bw = Math.min(58, (iw / steps.length) * .64);
+  steps.forEach((st, i) => {
+    const cx = P.l + (iw / steps.length) * (i + .5);
+    const y0 = Math.min(Y(st.start), Y(st.end));
+    const hh = Math.max(2, Math.abs(Y(st.end) - Y(st.start)));
+    /* ⚠ GİDER ÇUBUĞU YEŞİL OLMAZ. Yeşil "iyi" okunuyor; düşülen kalemler
+       sıcak tonda, kalan kâr yeşil olmalı. Kalem kendi rengini verebilir. */
+    const col = st.color || (st.total ? (opts.totalColor || "var(--accent)")
+      : st.v >= 0 ? (opts.upColor || "var(--good)") : (opts.downColor || "var(--c3)"));
+    s.appendChild(sv("rect", {x:cx - bw / 2, y:y0, width:bw, height:hh, rx:2.5,
+      fill:col, opacity:st.total ? 1 : .88}));
+    /* basamağı bir sonrakine bağlayan ince çizgi */
+    if (i < steps.length - 1 && !steps[i + 1].total){
+      const nx = P.l + (iw / steps.length) * (i + 1.5);
+      s.appendChild(sv("line", {x1:cx + bw / 2, y1:Y(st.end),
+        x2:nx - bw / 2, y2:Y(st.end), stroke:"var(--hair)", "stroke-dasharray":"2 2"}));
+    }
+    const lab = sv("text", {x:cx, y:h - 27, "text-anchor":"middle",
+      fill:"var(--ink2)", "font-size":"10.5", "font-weight":"600",
+      "font-family":"var(--f-num)"});
+    lab.textContent = opts.fmt ? opts.fmt(Math.abs(st.v)) : num(Math.abs(st.v));
+    s.appendChild(lab);
+    const t = sv("text", {x:cx, y:h - 11, "text-anchor":"middle", fill:"var(--muted)",
+      "font-size":"10", "font-family":"var(--f-ui)"});
+    t.textContent = st.k.length > 15 ? st.k.slice(0, 14) + "…" : st.k;
+    s.appendChild(t);
+  });
+  return s;
+}
+
+/* ── Huni. Aşamalar arası kayıp; her basamak bir yamuk. ───────────── */
+function funnel(items, opts){
+  opts = opts || {};
+  if (!items || !items.length) return noData(400, 180);
+  /* ⚠ İŞ DURUMLARI ALT KÜME DEĞİL, BÖLÜMDÜR. "Bir önceki aşamadan kaç
+     tanesi düştü" hesabı burada 400% gibi saçma sayılar üretiyordu:
+     65 ödenmiş iş 4 servis edilmişin alt kümesi değil. Genişlik EN BÜYÜK
+     aşamaya, sağdaki yüzde ise TOPLAMA göre veriliyor. */
+  const top = Math.max.apply(null, items.map(x => x.v || 0).concat([1]));
+  const sum = items.reduce((a, x) => a + (x.v || 0), 0) || 1;
+  const box = el("div", {class:"viz", style:{display:"flex", flexDirection:"column", gap:"4px"}});
+  items.forEach((it, i) => {
+    const frac = Math.max(.06, (it.v || 0) / top);
+    box.appendChild(el("div", {style:{display:"flex", alignItems:"center", gap:"10px"}}, [
+      el("div", {class:"sm", style:{flex:"0 0 34%", minWidth:"0", overflow:"hidden",
+        textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"right",
+        color:"var(--ink2)"}, text:it.k}),
+      /* ⚠ DAR ÇUBUKTA SAYI İÇERİ SIĞMIYOR. Beyaz yazı 6%'lık bir çubukta
+         kırpılıyordu ("16" → "1"); dar çubukta sayı dışarı, mürekkep
+         renginde yazılıyor. */
+      el("div", {style:{flex:"1", minWidth:"0", display:"flex",
+        alignItems:"center", gap:"7px"}}, [
+        el("div", {style:{width:(frac * 100) + "%", minWidth:"5%",
+          flex:"0 0 auto",
+          height:(opts.step || 30) + "px", borderRadius:"3px",
+          background:it.color || "var(--c" + ((i % 6) + 1) + ")",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          opacity:String(1 - i * 0.055)}},
+          frac >= .16 ? el("span", {class:"mono", style:{fontSize:"11.5px",
+            fontWeight:"600", color:"#fff", whiteSpace:"nowrap"},
+            text:opts.fmt ? opts.fmt(it.v) : num(it.v)}) : null),
+        frac < .16 ? el("span", {class:"mono", style:{fontSize:"11.5px",
+          fontWeight:"600", color:"var(--ink)", whiteSpace:"nowrap"},
+          text:opts.fmt ? opts.fmt(it.v) : num(it.v)}) : null
+      ]),
+      el("div", {class:"sm mut", style:{flex:"0 0 52px", fontSize:"10.5px",
+        textAlign:"left"}, text:Math.round((it.v || 0) / sum * 100) + "%"})
+    ]));
+  });
+  return box;
+}
+
+/* ── Kurşun çubuk. Hedefe göre nerede duruyoruz. ──────────────────── */
+function bulletBars(items, opts){
+  opts = opts || {};
+  if (!items || !items.length) return noData(400, 140);
+  const box = el("div", {class:"viz", style:{display:"flex", flexDirection:"column", gap:"13px"}});
+  items.forEach((it, i) => {
+    const mx = Math.max(it.v || 0, it.target || 0, 1) * 1.12;
+    const col = it.color || (it.target && it.v >= it.target ? "var(--good)"
+      : it.target ? "var(--warn)" : "var(--c" + ((i % 6) + 1) + ")");
+    box.appendChild(el("div", {style:{display:"flex", flexDirection:"column",
+      gap:"5px"}}, [
+      el("div", {style:{display:"flex", gap:"8px", alignItems:"baseline",
+        fontSize:"12px"}}, [
+        el("span", {style:{flex:"1", minWidth:"0", overflow:"hidden",
+          textOverflow:"ellipsis", whiteSpace:"nowrap"}, text:it.k}),
+        el("span", {class:"mono", style:{fontWeight:"600"},
+          text:opts.fmt ? opts.fmt(it.v) : num(it.v)}),
+        it.target ? el("span", {class:"sm mut", style:{fontSize:"10.5px"},
+          text:"of " + (opts.fmt ? opts.fmt(it.target) : num(it.target))}) : null
+      ]),
+      el("div", {style:{position:"relative", height:"14px", borderRadius:"3px",
+        background:"var(--sunk)", overflow:"hidden"}}, [
+        el("i", {style:{position:"absolute", left:"0", top:"0", bottom:"0",
+          width:Math.min(100, ((it.v || 0) / mx) * 100) + "%", background:col,
+          borderRadius:"3px", display:"block"}}),
+        /* hedef çizgisi — çubuğun üstünde dikey işaret */
+        it.target ? el("i", {style:{position:"absolute", top:"-2px", bottom:"-2px",
+          left:Math.min(99.4, (it.target / mx) * 100) + "%", width:"2px",
+          background:"var(--ink)", display:"block"}}) : null
+      ])
+    ]));
+  });
+  return box;
+}
+
+/* ── Serpme. İki sayı arasındaki ilişki; balon = üçüncü sayı. ─────── */
+function scatterPlot(points, opts){
+  opts = opts || {};
+  const h = opts.height || 220, W = 720, P = {t:14, r:16, b:34, l:opts.left || 56};
+  if (!points || !points.length) return noData(W, h, opts.empty);
+  const xs = points.map(p => p.x), ys = points.map(p => p.y);
+  const xmx = niceMax(Math.max.apply(null, xs.concat([1])) * 1.08);
+  const ymn = Math.min(0, Math.min.apply(null, ys));
+  const ymx = niceMax(Math.max.apply(null, ys.concat([1])) * 1.08);
+  const span = (ymx - ymn) || 1;
+  const iw = W - P.l - P.r, ih = h - P.t - P.b;
+  const X = v => P.l + (v / xmx) * iw;
+  const Y = v => P.t + ih - ((v - ymn) / span) * ih;
+  const s = sv("svg", {viewBox:"0 0 " + W + " " + h, width:"100%", height:h,
+    preserveAspectRatio:"none", style:"display:block"});
+  for (let i = 0; i <= 4; i++){
+    const y = P.t + (ih / 4) * i, v = ymx - (span / 4) * i;
+    s.appendChild(sv("line", {x1:P.l, y1:y, x2:W - P.r, y2:y, stroke:"var(--hair2)"}));
+    const t = sv("text", {x:P.l - 8, y:y + 3.5, "text-anchor":"end",
+      fill:"var(--muted)", "font-size":"10", "font-family":"var(--f-num)"});
+    t.textContent = opts.yfmt ? opts.yfmt(v) : num(v);
+    s.appendChild(t);
+  }
+  /* sıfır ekseni — kâr grafiğinde kırmızı bölge burada başlıyor */
+  if (ymn < 0)
+    s.appendChild(sv("line", {x1:P.l, y1:Y(0), x2:W - P.r, y2:Y(0),
+      stroke:"var(--hair)", "stroke-width":1.5}));
+  /* ⚠ HEDEF ÇİZGİSİ VARSA ÇİZ. Serpme tek başına "iyi mi kötü mü"
+     sorusuna cevap vermiyor; eşik çizgisi onu karara çeviriyor. */
+  if (opts.yTarget !== undefined && opts.yTarget !== null)
+    s.appendChild(sv("line", {x1:P.l, y1:Y(opts.yTarget), x2:W - P.r,
+      y2:Y(opts.yTarget), stroke:"var(--good)", "stroke-width":1.4,
+      "stroke-dasharray":"5 4", opacity:".8"}));
+  points.forEach(p => {
+    s.appendChild(sv("circle", {cx:X(p.x), cy:Y(p.y), r:p.r || 4.2,
+      fill:p.color || "var(--c1)", opacity:".62",
+      stroke:"var(--paper)", "stroke-width":".8"}));
+  });
+  for (let i = 0; i <= 4; i++){
+    const v = (xmx / 4) * i;
+    const t = sv("text", {x:X(v), y:h - 10,
+      "text-anchor":i === 0 ? "start" : i === 4 ? "end" : "middle",
+      fill:"var(--muted)", "font-size":"10", "font-family":"var(--f-num)"});
+    t.textContent = opts.xfmt ? opts.xfmt(v) : num(v);
+    s.appendChild(t);
+  }
+  if (opts.xLabel){
+    const t = sv("text", {x:W - P.r, y:h - 22, "text-anchor":"end",
+      fill:"var(--muted)", "font-size":"10", "font-family":"var(--f-ui)"});
+    t.textContent = opts.xLabel;
+    s.appendChild(t);
+  }
+  return s;
+}
+
+/* ── Ağaç harita. Payların büyüklük sırası; zaman yok, oran var. ──── */
+function treemap(items, opts){
+  opts = opts || {};
+  const list = (items || []).filter(x => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 9);
+  if (!list.length) return noData(600, 200, opts.empty);
+  const tot = list.reduce((a, x) => a + x.v, 0);
+  const H = opts.height || 210, W = 600;
+  const s = sv("svg", {viewBox:"0 0 " + W + " " + H, width:"100%", height:H,
+    preserveAspectRatio:"none", style:"display:block"});
+  /* ⚠ DİLİMLE-VE-ÇEVİR. Gerçek squarified algoritma bu boyutta fark
+     etmiyor; yön değiştirerek dilimlemek yeterince kare parça veriyor
+     ve uzun ince şeritleri önlüyor. */
+  let x = 0, y = 0, w = W, hh = H, i = 0, rest = tot;
+  list.forEach((it, idx) => {
+    const last = idx === list.length - 1;
+    const frac = last ? 1 : it.v / rest;
+    let bx, by, bw, bh;
+    if (w >= hh){ bw = last ? w : w * frac; bh = hh; bx = x; by = y; x += bw; w -= bw; }
+    else { bh = last ? hh : hh * frac; bw = w; bx = x; by = y; y += bh; hh -= bh; }
+    rest -= it.v;
+    const col = it.color || "var(--c" + ((i++ % 6) + 1) + ")";
+    s.appendChild(sv("rect", {x:bx + 1, y:by + 1, width:Math.max(1, bw - 2),
+      height:Math.max(1, bh - 2), rx:3, fill:col, opacity:".92"}));
+    if (bw > 62 && bh > 30){
+      const t1 = sv("text", {x:bx + 10, y:by + 21, fill:"#fff", "font-size":"11.5",
+        "font-family":"var(--f-ui)", "font-weight":"600"});
+      t1.textContent = it.k.length > Math.floor(bw / 7.2)
+        ? it.k.slice(0, Math.max(3, Math.floor(bw / 7.2) - 1)) + "…" : it.k;
+      s.appendChild(t1);
+      const t2 = sv("text", {x:bx + 10, y:by + 37, fill:"#fff", "font-size":"11",
+        "font-family":"var(--f-num)", opacity:".85"});
+      t2.textContent = (opts.fmt ? opts.fmt(it.v) : num(it.v)) +
+        "  ·  " + Math.round(it.v / tot * 100) + "%";
+      s.appendChild(t2);
+    }
+  });
+  return s;
+}
+
+/* ── Dağılım. Tek iş değil, işlerin ŞEKLİ. ────────────────────────── */
+function histogram(values, opts){
+  opts = opts || {};
+  const vals = (values || []).filter(v => isFinite(v) && v > 0);
+  const h = opts.height || 200, W = 720, P = {t:12, r:12, b:34, l:opts.left || 46};
+  if (vals.length < 3) return noData(W, h, opts.empty || "Not enough records yet");
+  const mx = niceMax(Math.max.apply(null, vals));
+  const bins = opts.bins || 14, bw = mx / bins;
+  const counts = new Array(bins).fill(0);
+  vals.forEach(v => { const i = Math.min(bins - 1, Math.floor(v / bw)); counts[i]++; });
+  const cmx = Math.max.apply(null, counts) || 1;
+  const iw = W - P.l - P.r, ih = h - P.t - P.b;
+  const s = sv("svg", {viewBox:"0 0 " + W + " " + h, width:"100%", height:h,
+    preserveAspectRatio:"none", style:"display:block"});
+  for (let i = 0; i <= 3; i++){
+    const y = P.t + (ih / 3) * i;
+    s.appendChild(sv("line", {x1:P.l, y1:y, x2:W - P.r, y2:y, stroke:"var(--hair2)"}));
+    const t = sv("text", {x:P.l - 8, y:y + 3.5, "text-anchor":"end",
+      fill:"var(--muted)", "font-size":"10", "font-family":"var(--f-num)"});
+    t.textContent = num(Math.round(cmx - (cmx / 3) * i));
+    s.appendChild(t);
+  }
+  /* medyan çizgisi — ortalamadan daha dürüst, tek büyük iş kaydırmıyor */
+  const sorted = vals.slice().sort((a, b) => a - b);
+  const med = sorted[Math.floor(sorted.length / 2)];
+  counts.forEach((c, i) => {
+    const bx = P.l + (iw / bins) * i;
+    const bh = (c / cmx) * ih;
+    s.appendChild(sv("rect", {x:bx + 1, y:P.t + ih - bh, width:(iw / bins) - 2,
+      height:Math.max(0, bh), rx:2, fill:opts.color || "var(--c2)",
+      opacity:(i * bw <= med && med < (i + 1) * bw) ? 1 : .62}));
+  });
+  const mxp = P.l + (med / mx) * iw;
+  s.appendChild(sv("line", {x1:mxp, y1:P.t, x2:mxp, y2:P.t + ih,
+    stroke:"var(--ink)", "stroke-width":1.4, "stroke-dasharray":"4 3"}));
+  const rightRoom = mxp < W - P.r - 90;
+  /* beyaz hale — etiket çubuğun üstüne düşse de okunuyor */
+  const ml = sv("text", {x:rightRoom ? mxp + 7 : mxp - 7, y:P.t + 10,
+    "text-anchor":rightRoom ? "start" : "end",
+    fill:"var(--ink)", "font-size":"10", "font-family":"var(--f-ui)",
+    stroke:"var(--paper)", "stroke-width":"3", "paint-order":"stroke"});
+  ml.textContent = "median " + (opts.fmt ? opts.fmt(med) : num(med));
+  s.appendChild(ml);
+  /* ⚠ SON TİK KIRPILIYORDU. Ortalanmış etiket çizim alanının dışına
+     taşıyor ve "$20,0…" gibi yarım okunuyordu; uçlar hizalanıyor. */
+  for (let i = 0; i <= 4; i++){
+    const v = (mx / 4) * i;
+    const t = sv("text", {x:P.l + (iw / 4) * i, y:h - 10,
+      "text-anchor":i === 0 ? "start" : i === 4 ? "end" : "middle",
+      fill:"var(--muted)", "font-size":"10", "font-family":"var(--f-num)"});
+    t.textContent = opts.fmt ? opts.fmt(v) : num(v);
+    s.appendChild(t);
+  }
+  return s;
+}
+
+/* ── Eğim. Bu dönem vs geçen dönem, kalem kalem. ──────────────────── */
+function slopeChart(items, opts){
+  opts = opts || {};
+  const list = (items || []).filter(x => (x.a || 0) > 0 || (x.b || 0) > 0).slice(0, 8);
+  const h = opts.height || 220, W = 620, P = {t:22, r:150, b:22, l:150};
+  if (!list.length) return noData(W, h, opts.empty);
+  const mx = Math.max.apply(null, list.map(x => Math.max(x.a || 0, x.b || 0)).concat([1]));
+  const ih = h - P.t - P.b;
+  const Y = v => P.t + ih - (v / mx) * ih;
+  const s = sv("svg", {viewBox:"0 0 " + W + " " + h, width:"100%", height:h,
+    preserveAspectRatio:"none", style:"display:block;overflow:visible"});
+  [[P.l, opts.aLabel || "before"], [W - P.r, opts.bLabel || "now"]].forEach(c => {
+    s.appendChild(sv("line", {x1:c[0], y1:P.t - 8, x2:c[0], y2:P.t + ih + 6,
+      stroke:"var(--hair)"}));
+    const t = sv("text", {x:c[0], y:P.t - 13, "text-anchor":"middle",
+      fill:"var(--muted)", "font-size":"10", "letter-spacing":".06em",
+      "font-family":"var(--f-ui)"});
+    t.textContent = String(c[1]).toUpperCase();
+    s.appendChild(t);
+  });
+  /* ⚠ ETİKETLER ÜST ÜSTE BİNİYORDU. Yakın değerli üç müşteri aynı satıra
+     yazılıp okunmaz hale geliyordu; etiketler en az 13px arayla itiliyor
+     (nokta yerinde kalıyor, yalnız yazı kayıyor). */
+  const nudge = key => {
+    const ys = list.map((it, i) => ({i:i, y:Y(it[key] || 0)}))
+      .sort((a, b) => a.y - b.y);
+    for (let k = 1; k < ys.length; k++)
+      if (ys[k].y - ys[k - 1].y < 13) ys[k].y = ys[k - 1].y + 13;
+    const out = [];
+    ys.forEach(o => out[o.i] = o.y);
+    return out;
+  };
+  const LA = nudge("a"), LB = nudge("b");
+  list.forEach((it, i) => {
+    const up = (it.b || 0) >= (it.a || 0);
+    const col = it.color || (up ? "var(--good)" : "var(--bad)");
+    const ya = Y(it.a || 0), yb = Y(it.b || 0);
+    s.appendChild(sv("line", {x1:P.l, y1:ya, x2:W - P.r, y2:yb, stroke:col,
+      "stroke-width":1.8, opacity:".8"}));
+    s.appendChild(sv("circle", {cx:P.l, cy:ya, r:3.4, fill:col}));
+    s.appendChild(sv("circle", {cx:W - P.r, cy:yb, r:3.4, fill:col}));
+    const la = sv("text", {x:P.l - 10, y:LA[i] + 3.5, "text-anchor":"end",
+      fill:"var(--ink2)", "font-size":"11", "font-family":"var(--f-ui)"});
+    la.textContent = (it.k.length > 17 ? it.k.slice(0, 16) + "…" : it.k) +
+      "  " + (opts.fmt ? opts.fmt(it.a || 0) : num(it.a || 0));
+    s.appendChild(la);
+    const lb = sv("text", {x:W - P.r + 10, y:LB[i] + 3.5, fill:"var(--ink)",
+      "font-size":"11", "font-weight":"600", "font-family":"var(--f-num)"});
+    lb.textContent = opts.fmt ? opts.fmt(it.b || 0) : num(it.b || 0);
+    s.appendChild(lb);
+  });
+  return s;
+}
+
+/* ── Kadran çubukları. Halkanın yerine; iç içe yaylar. ────────────── */
+function radialBars(items, opts){
+  opts = opts || {};
+  /* ⚠ BÜYÜK DEĞER DIŞTA. Sırasız çizince en büyük pay en küçük yarıçapa
+     düşüyordu ve grafik ters okunuyordu; küçük paylar da sol alttan
+     başlayıp havada asılı duran minik hapları andırıyordu. Sıralama
+     azalan, başlangıç saat 12, yay 82° boşluk bırakıyor. */
+  const list = (items || []).filter(x => x.v > 0)
+    .slice().sort((a, b) => b.v - a.v).slice(0, 6);
+  const D = opts.size || 200;
+  if (!list.length) return noData(300, 160);
+  const mx = Math.max.apply(null, list.map(x => x.v));
+  const R = D / 2, band = (R * .78) / list.length, SWEEP = .78;
+  const s = sv("svg", {width:D, height:D, viewBox:"0 0 " + D + " " + D,
+    style:"flex:0 0 auto"});
+  list.forEach((it, i) => {
+    const r = R - band * (i + .5) - 2;
+    const col = it.color || "var(--c" + ((i % 6) + 1) + ")";
+    const C = 2 * Math.PI * r;
+    const frac = Math.max(.012, it.v / mx) * SWEEP;
+    const w = band * .62;
+    s.appendChild(sv("circle", {cx:R, cy:R, r:r, fill:"none", stroke:"var(--sunk)",
+      "stroke-width":w, "stroke-dasharray":(C * SWEEP) + " " + C,
+      "stroke-linecap":"round", transform:"rotate(-90 " + R + " " + R + ")"}));
+    s.appendChild(sv("circle", {cx:R, cy:R, r:r, fill:"none", stroke:col,
+      "stroke-width":w, "stroke-dasharray":(C * frac) + " " + C,
+      "stroke-linecap":"round", transform:"rotate(-90 " + R + " " + R + ")"}));
+  });
+  const leg = el("div", {style:{display:"flex", flexDirection:"column", gap:"7px",
+    minWidth:"0", flex:"1 1 140px"}});
+  list.forEach((it, i) => leg.appendChild(el("div", {style:{display:"flex",
+    alignItems:"center", gap:"7px", fontSize:"12px", minWidth:"0"}}, [
+    el("i", {style:{width:"9px", height:"9px", borderRadius:"2px", flex:"0 0 auto",
+      background:it.color || "var(--c" + ((i % 6) + 1) + ")"}}),
+    el("span", {style:{flex:"1", minWidth:"0", overflow:"hidden",
+      whiteSpace:"nowrap", textOverflow:"ellipsis"}, text:it.k}),
+    el("span", {class:"mono", style:{fontWeight:"600", fontSize:"11.5px"},
+      text:opts.fmt ? opts.fmt(it.v) : num(it.v)})
+  ])));
+  return el("div", {class:"viz", style:{display:"flex", gap:"16px", alignItems:"center",
+    flexWrap:"wrap", justifyContent:"center"}}, [s, leg]);
+}
+
+/* ── Vafil. Yüz kare = bütün; halkanın sayılabilir hali. ──────────── */
+function waffle(items, opts){
+  opts = opts || {};
+  const list = (items || []).filter(x => x.v > 0);
+  const tot = list.reduce((a, x) => a + x.v, 0);
+  if (!tot) return noData(300, 150);
+  const cells = [];
+  let used = 0;
+  list.forEach((it, i) => {
+    const n = i === list.length - 1 ? 100 - used : Math.round(it.v / tot * 100);
+    for (let k = 0; k < n; k++)
+      cells.push(it.color || "var(--c" + ((i % 6) + 1) + ")");
+    used += n;
+  });
+  const grid = el("div", {style:{display:"grid", gap:"3px",
+    gridTemplateColumns:"repeat(10,1fr)", flex:"0 0 auto", width:"152px"}});
+  cells.slice(0, 100).forEach(c => grid.appendChild(el("i", {style:{
+    display:"block", paddingTop:"100%", borderRadius:"2px", background:c}})));
+  const leg = el("div", {style:{display:"flex", flexDirection:"column", gap:"7px",
+    minWidth:"0", flex:"1 1 140px"}});
+  list.forEach((it, i) => leg.appendChild(el("div", {style:{display:"flex",
+    alignItems:"center", gap:"7px", fontSize:"12px", minWidth:"0"}}, [
+    el("i", {style:{width:"9px", height:"9px", borderRadius:"2px", flex:"0 0 auto",
+      background:it.color || "var(--c" + ((i % 6) + 1) + ")"}}),
+    el("span", {style:{flex:"1", minWidth:"0", overflow:"hidden",
+      whiteSpace:"nowrap", textOverflow:"ellipsis"}, text:it.k}),
+    el("span", {class:"mono mut", style:{fontSize:"11px"},
+      text:Math.round(it.v / tot * 100) + "%"}),
+    el("span", {class:"mono", style:{fontWeight:"600", fontSize:"11.5px"},
+      text:opts.fmt ? opts.fmt(it.v) : num(it.v)})
+  ])));
+  return el("div", {class:"viz", style:{display:"flex", gap:"16px", alignItems:"center",
+    flexWrap:"wrap", justifyContent:"center"}}, [grid, leg]);
+}
+
+/* ── Lolipop. Yatay çubuğun daha hafif, daha editoryal hali. ──────── */
+function lollipop(items, opts){
+  opts = opts || {};
+  if (!items || !items.length) return noData(400, opts.height || 150);
+  const mx = Math.max.apply(null, items.map(x => x.v).concat([1]));
+  const box = el("div", {class:"viz", style:{display:"flex", flexDirection:"column", gap:"11px"}});
+  items.forEach((it, i) => {
+    const col = it.color || "var(--c" + ((i % 6) + 1) + ")";
+    box.appendChild(el("div", {style:{display:"flex", alignItems:"center", gap:"10px"}}, [
+      el("span", {class:"sm", style:{flex:"0 0 33%", minWidth:"0", overflow:"hidden",
+        textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"right",
+        color:"var(--ink2)"}, text:it.k}),
+      el("div", {style:{flex:"1", minWidth:"0", position:"relative", height:"12px"}}, [
+        el("i", {style:{position:"absolute", left:"0", top:"5.5px", height:"1.5px",
+          width:Math.max(1.5, (it.v / mx) * 100) + "%", background:col,
+          opacity:".45", display:"block"}}),
+        el("i", {style:{position:"absolute", top:"1.5px", display:"block",
+          left:"calc(" + Math.max(1.5, (it.v / mx) * 100) + "% - 4.5px)",
+          width:"9px", height:"9px", borderRadius:"50%", background:col}})
+      ]),
+      el("span", {class:"mono", style:{flex:"0 0 auto", fontWeight:"600",
+        fontSize:"12px"}, text:opts.fmt ? opts.fmt(it.v) : num(it.v)})
+    ]));
+  });
+  return box;
+}
+
+/* ── İkili. Çubuk + üstünde çizgi; iki büyüklük tek eksende. ──────── */
+function comboChart(labels, bars, line, opts){
+  opts = opts || {};
+  const h = opts.height || 210, W = 720, P = {t:14, r:12, b:26, l:opts.left || 54};
+  if (!labels || !labels.length) return noData(W, h);
+  const mx = niceMax(Math.max.apply(null, bars.concat([0])) * 1.1) || 10;
+  /* ⚠ İKİNCİ EKSEN AYRI ÖLÇEKLENİR. Kâr ciroyla aynı eksende çizilince
+     düz bir çizgiye dönüşüyor ve hiçbir şey anlatmıyor. */
+  const lmn = Math.min(0, Math.min.apply(null, line.concat([0])));
+  const lmx = Math.max.apply(null, line.concat([1])) * 1.15;
+  const lspan = (lmx - lmn) || 1;
+  const iw = W - P.l - P.r, ih = h - P.t - P.b;
+  const s = sv("svg", {viewBox:"0 0 " + W + " " + h, width:"100%", height:h,
+    preserveAspectRatio:"none", style:"display:block"});
+  for (let i = 0; i <= 4; i++){
+    const y = P.t + (ih / 4) * i, v = mx - (mx / 4) * i;
+    s.appendChild(sv("line", {x1:P.l, y1:y, x2:W - P.r, y2:y, stroke:"var(--hair2)"}));
+    const t = sv("text", {x:P.l - 8, y:y + 3.5, "text-anchor":"end",
+      fill:"var(--muted)", "font-size":"10", "font-family":"var(--f-num)"});
+    t.textContent = opts.fmt ? opts.fmt(v) : num(v);
+    s.appendChild(t);
+  }
+  const bw = Math.min(40, (iw / labels.length) * .56);
+  const X = i => P.l + (iw / labels.length) * (i + .5);
+  bars.forEach((v, i) => {
+    const bh = Math.max(0, (Math.max(0, v) / mx) * ih);
+    s.appendChild(sv("rect", {x:X(i) - bw / 2, y:P.t + ih - bh, width:bw,
+      height:bh, rx:2.5, fill:opts.barColor || "var(--c1)", opacity:".34"}));
+  });
+  const LY = v => P.t + ih - ((v - lmn) / lspan) * ih;
+  if (lmn < 0)
+    s.appendChild(sv("line", {x1:P.l, y1:LY(0), x2:W - P.r, y2:LY(0),
+      stroke:"var(--hair)", "stroke-dasharray":"3 3"}));
+  const pts = line.map((v, i) => X(i) + "," + LY(v));
+  s.appendChild(sv("polyline", {points:pts.join(" "), fill:"none",
+    stroke:opts.lineColor || "var(--accent)", "stroke-width":2.2,
+    "stroke-linejoin":"round", "stroke-linecap":"round"}));
+  line.forEach((v, i) => s.appendChild(sv("circle", {cx:X(i), cy:LY(v), r:2.6,
+    fill:opts.lineColor || "var(--accent)", stroke:"var(--paper)", "stroke-width":1.3})));
+  const step = Math.ceil(labels.length / 12);
+  labels.forEach((L, i) => {
+    if (i % step && i !== labels.length - 1) return;
+    const t = sv("text", {x:X(i), y:h - 8, "text-anchor":"middle",
+      fill:"var(--muted)", "font-size":"10", "font-family":"var(--f-ui)"});
+    t.textContent = L;
+    s.appendChild(t);
+  });
+  return s;
+}
+
 /* ── 14_grid.js ── */
 /* ═══ TABLO + FORM MOTORU ═══════════════════════════════════════════════
    17 modülün 13'ü aynı şekil: listele / ara / sırala / ekle / düzenle /
@@ -2592,30 +3169,73 @@ function kpiStrip(cards){
         overflow:"hidden", textOverflow:"ellipsis"}, text:c.note}) : null
     ]))));
 }
+/* ── GRAFİK İSKELET EKSENİ ─────────────────────────────────────────────
+   ⚠ KOMPOZİSYON DEĞİŞTİRMEK YETMİYOR. On üç üründe kutuların yeri
+     değişiyordu ama içlerindeki çizim aynıydı: alan + halka + yığın +
+     gösterge. Ürünler ilk bakışta birbirinin kopyası duruyordu.
+     `V.design.charts` her yuvaya farklı bir İSKELET veriyor.
+   ⚠ Yuvalar: time (büyük zaman serisi) · mix (para nereye gidiyor) ·
+     part (durum dağılımı) · rank (sıralama) · side (kare panel).       */
+function CHV(slot, dflt){
+  const c = (V.design && V.design.charts) || {};
+  return c[slot] || dflt;
+}
+
+/* Ay × haftagünü ısı matrisi — "iş ne zaman geliyor" sorusu. */
+function heatMatrix(st){
+  const DOW = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const idx = {};
+  st.months.forEach((mk, i) => idx[mk] = i);
+  const m = DOW.map(() => st.months.map(() => 0));
+  rows(V.job.key).filter(isRevenue).forEach(j => {
+    const d = jobDate(j); if (!d) return;
+    const ci = idx[monthKey(d)];
+    if (ci === undefined) return;
+    const w = (parseD(d).getDay() + 6) % 7;
+    m[w][ci] += jobValue(j);
+  });
+  return {rows:DOW, cols:st.months.map(monthLabel), m:m};
+}
+
 /* ⚠ YÜKSEKLİK KOMPOZİSYONA GÖRE. İlk ekranda tek grafik varsa 210px yetmiyor:
    carwash'ta grafik ekranın %13,2'siydi ve pano "boş" ölçülüyordu. */
 function trend(st, kind, h){
   const labels = st.months.map(monthLabel);
   const ht = h || 210;
-  const body = kind === "bars"
-    ? barChart(labels, st.revSeries, {height:ht, fmt:money0, color:"var(--c1)", dim:true})
-    : areaChart(labels, [{data:st.revSeries, color:"var(--c1)"},
-                         {data:st.costSeries, color:"var(--c5)"}],
-                {height:ht, fmt:money0});
-  const legend = kind === "bars" ? null
-    : el("div", {class:"sm", style:{display:"flex", gap:"12px"}}, [
-        el("span", {style:{display:"flex", alignItems:"center", gap:"5px"}}, [
-          el("i", {style:{width:"9px",height:"9px",borderRadius:"2px",background:"var(--c1)"}}),
-          el("span", {class:"mut", text:"Revenue"})]),
-        el("span", {style:{display:"flex", alignItems:"center", gap:"5px"}}, [
-          el("i", {style:{width:"9px",height:"9px",borderRadius:"2px",background:"var(--c5)"}}),
-          el("span", {class:"mut", text:"Costs"})])
-      ]);
-  return el("div", {class:"panel chart grow"}, [
+  const v = CHV("time", kind || "area");
+  const dot = c => el("i", {style:{width:"9px", height:"9px", borderRadius:"2px",
+    background:c}});
+  const key = pairs => el("div", {class:"sm", style:{display:"flex", gap:"12px",
+    flexWrap:"wrap"}}, pairs.map(pr =>
+      el("span", {style:{display:"flex", alignItems:"center", gap:"5px"}},
+        [dot(pr[1]), el("span", {class:"mut", text:pr[0]})])));
+  let body, title, legend = null, cls = "panel chart grow";
+  if (v === "bars"){
+    title = "Revenue by Month";
+    body = barChart(labels, st.revSeries, {height:ht, fmt:money0,
+      color:"var(--c1)", dim:true});
+  } else if (v === "combo"){
+    title = "Revenue and Profit";
+    legend = key([["Revenue", "var(--c1)"], ["Profit", "var(--accent)"]]);
+    body = comboChart(labels, st.revSeries,
+      st.months.map((mk, i) => st.revSeries[i] - st.costSeries[i]),
+      {height:ht, fmt:money0, barColor:"var(--c1)", lineColor:"var(--accent)"});
+  } else if (v === "heat"){
+    const hm = heatMatrix(st);
+    title = "When the Work Lands";
+    legend = el("div", {class:"hint", text:"revenue by month and weekday"});
+    body = heatGrid(hm.rows, hm.cols, hm.m, {fmt:money0, cell:Math.round(ht / 9)});
+    cls = "panel chart fixed grow";
+  } else {
+    title = "Revenue vs Costs";
+    legend = key([["Revenue", "var(--c1)"], ["Costs", "var(--c5)"]]);
+    body = areaChart(labels, [{data:st.revSeries, color:"var(--c1)"},
+                              {data:st.costSeries, color:"var(--c5)"}],
+                     {height:ht, fmt:money0});
+  }
+  return el("div", {class:cls}, [
     el("div", {class:"panel-head"}, [
-      el("h2", {text:kind === "bars" ? "Revenue by Month" : "Revenue vs Costs"}),
-      el("div", {class:"sp"}), legend
-    ]),
+      el("h2", {text:title}), el("div", {class:"sp"}), legend]),
     el("div", {class:"panel-body"}, body)
   ]);
 }
@@ -2625,10 +3245,31 @@ function statusData(st){
 }
 function statusPart(st, kind, size){
   const d = statusData(st);
-  return panel(W("jobs") + " by Status", "this period",
-    kind === "bars" ? hbars(d, {fmt:num})
-                    : donut(d, {label:W("jobs"), size:size || 150}),
-    false, "chart fixed grow");
+  const v = CHV("part", kind || "donut");
+  const live = d.filter(x => x.v > 0);
+  let body, title = W("jobs") + " by Status", hint = "this period";
+  if (v === "bars") body = hbars(d, {fmt:num});
+  else if (v === "radial") body = radialBars(live, {fmt:num, size:size || 186});
+  else if (v === "waffle") body = waffle(live, {fmt:num});
+  else if (v === "funnel"){
+    /* ⚠ HUNİ SIRAYI OKUR. Aşamalar config'de iş akışı sırasında duruyor;
+       halka bunu kaybediyor, huni "nerede kaybediyoruz"u gösteriyor. */
+    /* ⚠ HUNİ DÖNEMİ DEĞİL TÜM BORUYU OKUR. Dönem filtresiyle gelecekteki
+       teklif ve rezervasyonlar dışarıda kalıyordu: ilk dört aşama sıfır,
+       grafik boş duruyordu. */
+    /* ⚠ TÜM TARİHİ SAYINCA HUNİ ÖLÜYOR. "Paid" kovası yıllardır birikiyor:
+       390'a karşı 5 · 6 · 7 çubuğu okunmaz stub'a dönüyordu. Sayılan şey
+       ÖNÜNDEKİ İŞ (hâlâ açık, tarihi ileride olsa bile) artı BU DÖNEMDE
+       kapanan iş — sahibin baktığı pencere bu. */
+    title = "Where " + W("jobs") + " Stand";
+    hint = "open work and this period";
+    const live = rows(V.job.key).filter(j =>
+      isOpen(j) || (isRevenue(j) && inRange(jobDate(j), st.from, today())));
+    body = funnel(V.job.stages.filter(s2 => !s2.dead).map(s2 => ({
+      k:s2.t, v:live.filter(j => j.status === s2.v).length,
+      color:s2.c})), {fmt:num, step:26});
+  } else body = donut(d, {label:W("jobs"), size:size || 150});
+  return panel(title, hint, body, false, "chart fixed grow");
 }
 function attention(){
   const AL = alerts();
@@ -2655,20 +3296,40 @@ function attention(){
           el("p", {text:V.allClear || "Nothing overdue and nothing expiring soon."})]))
   ]);
 }
+/* Sıralama yuvası — dört iskelet. Eğim iskeleti önceki dönemi de ister. */
+function rankBody(cur, prv, empty){
+  const v = CHV("rank", "hbars");
+  if (!cur.length) return noData(300, 110, empty);
+  if (v === "lolli") return lollipop(cur, {fmt:money0});
+  if (v === "bullet"){
+    /* ⚠ HEDEF ORTALAMA. "En iyi altı" listesi tek başına kimin altta
+       kaldığını söylemiyor; ortalama çizgisi onu karara çeviriyor. */
+    const avg = cur.reduce((a, x) => a + x.v, 0) / cur.length;
+    return bulletBars(cur.map(x => ({k:x.k, v:x.v, target:avg})), {fmt:money0});
+  }
+  if (v === "slope"){
+    const pm = {};
+    prv.forEach(x => pm[x.k] = x.v);
+    return slopeChart(cur.map(x => ({k:x.k, a:pm[x.k] || 0, b:x.v})),
+      {fmt:money0, aLabel:"prior", bLabel:"now", empty:empty});
+  }
+  return hbars(cur, {fmt:money0});
+}
 function rankClients(st){
-  const d = topN(sumBy(st.cur, j => j[CK()], j => jobValue(j)), 6, clientName);
+  const cur = topN(sumBy(st.cur, j => j[CK()], j => jobValue(j)), 6, clientName);
+  const prv = topN(sumBy(st.prv, j => j[CK()], j => jobValue(j)), 40, clientName);
   return panel("Top " + W("clients"), null,
-    d.length ? hbars(d, {fmt:money0}) : noData(300, 110, "No revenue in this period"),
-    false, "grow");
+    rankBody(cur, prv, "No revenue in this period"), false, "grow");
 }
 function rankWorkers(st){
   const wf = V.job.workerEntity ? V.entities[V.job.workerEntity].jobField : null;
   if (!wf) return null;
-  const d = topN(sumBy(st.cur.filter(j => j[wf]), j => j[wf], j => jobValue(j)), 6,
+  const cur = topN(sumBy(st.cur.filter(j => j[wf]), j => j[wf], j => jobValue(j)), 6,
+    id => nameOf(V.job.workerEntity, id));
+  const prv = topN(sumBy(st.prv.filter(j => j[wf]), j => j[wf], j => jobValue(j)), 40,
     id => nameOf(V.job.workerEntity, id));
   return panel("Revenue by " + W("worker"), null,
-    d.length ? hbars(d, {fmt:money0})
-             : noData(300, 110, "No " + W("worker").toLowerCase() + " assigned yet"),
+    rankBody(cur, prv, "No " + W("worker").toLowerCase() + " assigned yet"),
     false, "grow");
 }
 function recentTable(n){
@@ -2745,8 +3406,22 @@ function boardPreview(compact){
   ]);
 }
 
-/* Gider kırılımı — yığılmış çubuk. Panoyu grafik ağırlıklı yapan parça. */
+/* Gider kırılımı — dört iskelet. Panoyu grafik ağırlıklı yapan parça. */
+/* ⚠ DÖNEM FİLTRESİ ŞART. Bu fonksiyon önce TÜM giderleri topluyordu;
+   şelale 90 günün cirosunu 14 ayın gideriyle karşılaştırınca kâr
+   −849.620$ çıkıyordu ve grafik tam ters okunuyordu. */
+function costCats(n, from, to){
+  const m = new Map();
+  rows("expenses").forEach(e => {
+    if (from && !inRange(e.date, from, to || today())) return;
+    const c = e.category || "Other";
+    m.set(c, (m.get(c) || 0) + n0(e.amount));
+  });
+  return Array.from(m.entries()).map(([k, v]) => ({k:k, v:v}))
+    .sort((a, b) => b.v - a.v).slice(0, n || 6);
+}
 function costMix(st){
+  const v = CHV("mix", "stack");
   const cats = new Map();
   rows("expenses").forEach(e => {
     const k = monthKey(e.date); if (!k) return;
@@ -2757,27 +3432,93 @@ function costMix(st){
   const top = Array.from(cats.entries())
     .map(([k, m]) => ({k:k, tot:Object.values(m).reduce((a, b) => a + b, 0), m:m}))
     .sort((a, b) => b.tot - a.tot).slice(0, 5);
-  const series = top.map((t, i) => ({color:"var(--c" + ((i % 6) + 1) + ")",
-    data:st.months.map(mk => t.m[mk] || 0)}));
-  return el("div", {class:"panel chart grow"}, [
-    el("div", {class:"panel-head"}, [
-      el("h2", {text:"Where the Money Goes"}), el("div", {class:"sp"}),
-      el("div", {class:"sm", style:{display:"flex", gap:"10px", flexWrap:"wrap"}},
-        top.map((t, i) => el("span", {style:{display:"flex", alignItems:"center",
-          gap:"5px"}}, [
-          el("i", {style:{width:"9px", height:"9px", borderRadius:"2px",
-            background:"var(--c" + ((i % 6) + 1) + ")"}}),
-          el("span", {class:"mut", text:t.k})])))
-    ]),
-    el("div", {class:"panel-body"}, series.length
+  const col = i => "var(--c" + ((i % 6) + 1) + ")";
+  let title = "Where the Money Goes", legend = null, body, cls = "panel chart grow";
+  if (v === "tree"){
+    title = "Cost Breakdown";
+    legend = el("div", {class:"hint", text:"biggest first"});
+    body = treemap(costCats(9, st.from), {fmt:money0, height:220,
+      empty:"No costs logged yet"});
+  } else if (v === "waterfall"){
+    /* ⚠ ŞELALE CİRODAN KÂRA GİDEN YOLU GÖSTERİR. Yığılmış çubuk "ne kadar
+       harcandı"yı söylüyor; şelale "geriye ne kaldı"yı söylüyor — sahibin
+       sorduğu soru bu. */
+    title = "From Revenue to Profit";
+    legend = el("div", {class:"hint", text:"this period"});
+    const c4 = costCats(4, st.from);
+    const rest = (st.rev - st.profit) - c4.reduce((a, x) => a + x.v, 0);
+    body = waterfall([{k:"Revenue", v:st.rev, total:true, color:"var(--c2)"}]
+      /* ⚠ --c3 HER PALETTE AYNI DEĞİL. highway'de yeşil çıkıyordu ve
+         düşülen kalemler "iyi" gibi okunuyordu. --warn her palette sıcak. */
+      .concat(c4.map(x => ({k:x.k, v:-x.v, color:"var(--warn)"})))
+      .concat(rest > 0 ? [{k:"Everything else", v:-rest, color:"var(--warn)"}] : [])
+      .concat([{k:"Profit", v:st.profit, total:true,
+                color:st.profit >= 0 ? "var(--good)" : "var(--bad)"}]),
+      {fmt:money0, height:230});
+  } else if (v === "waffle"){
+    title = "Every Dollar Out";
+    legend = el("div", {class:"hint", text:"one square is one percent"});
+    body = waffle(costCats(6, st.from), {fmt:money0});
+    cls = "panel chart fixed grow";
+  } else {
+    legend = el("div", {class:"sm", style:{display:"flex", gap:"10px",
+      flexWrap:"wrap"}}, top.map((t, i) => el("span", {style:{display:"flex",
+        alignItems:"center", gap:"5px"}}, [
+        el("i", {style:{width:"9px", height:"9px", borderRadius:"2px",
+          background:col(i)}}),
+        el("span", {class:"mut", text:t.k})])));
+    const series = top.map((t, i) => ({color:col(i),
+      data:st.months.map(mk => t.m[mk] || 0)}));
+    body = series.length
       ? stackChart(st.months.map(monthLabel), series, {height:200, fmt:money0})
-      : noData(600, 180, "No costs logged yet"))
+      : noData(600, 180, "No costs logged yet");
+  }
+  return el("div", {class:cls}, [
+    el("div", {class:"panel-head"}, [
+      el("h2", {text:title}), el("div", {class:"sp"}), legend]),
+    el("div", {class:"panel-body"}, body)
   ]);
 }
 
-/* Marj göstergesi — tek oranı büyük göstermek. */
+/* Kare panel — dört iskelet. Tek oranı büyük göstermek ya da işlerin
+   şeklini göstermek; ikisi de aynı yere sığıyor. */
 function marginGauge(st){
   const m = st.rev ? st.profit / st.rev * 100 : 0;
+  const v = CHV("side", "gauge");
+  if (v === "hist"){
+    /* ⚠ TEK ORTALAMA YALAN SÖYLER. Bir büyük iş ortalamayı yukarı çekiyor;
+       dağılım işlerin gerçek şeklini gösteriyor ve medyanı işaretliyor. */
+    return panel(W("job") + " Size Spread", "this period",
+      histogram(st.cur.map(jobValue), {fmt:money0, height:210, color:"var(--c2)",
+        empty:"Not enough " + W("jobsLower") + " yet"}), false, "chart grow");
+  }
+  if (v === "scatter"){
+    const pts = st.cur.filter(j => jobQty(j) > 0).map(j => ({
+      x:jobQty(j), y:jobValue(j), r:3.8,
+      color:jobRate(j) >= (V.job.goodRate || 0) ? "var(--good)" : "var(--c3)"}));
+    const avg = st.qty ? st.rev / st.qty : 0;
+    return panel("Price against " + (qtyUnit() || "size"), "each dot is one " +
+      W("jobLower"),
+      scatterPlot(pts, {fmt:money0, yfmt:money0, height:210,
+        xLabel:qtyUnit(), yTarget:null,
+        empty:"No " + W("jobsLower") + " with a " + (qtyUnit() || "size") + " yet"}),
+      false, "chart grow");
+  }
+  if (v === "bullet"){
+    const inv = st.invoices, paid = inv.filter(i => i.paidDate).length;
+    /* ⚠ "PROFIT MARGIN ... OF 15" HER İŞTE DOĞRU DEĞİL. Kilise panosunda
+       bağış fazlasına kâr marjı demek ve %15 hedef koymak yanlıştı;
+       dikey kendi etiketini ve hedefini veriyor. */
+    const target = V.marginTarget || 15;
+    return panel("Against Target", "this period",
+      bulletBars([
+        {k:V.marginLabel || "Profit margin", v:Math.max(0, m), target:target,
+         color:m >= target ? "var(--good)" : "var(--warn)"},
+        {k:"Revenue", v:st.rev, target:st.revPrev || st.rev},
+        {k:"Invoices paid", v:paid, target:inv.length || 1}
+      ], {fmt:v => v >= 1000 ? money0(v) : num(v, v % 1 ? 1 : 0)}),
+      false, "chart fixed grow");
+  }
   return panel("Profit Margin", "this period",
     el("div", {}, [
       gauge(Math.max(0, m), {size:168, thick:16,
@@ -3675,7 +4416,8 @@ const SKINS = [
   {v:"diesel",   t:"Diesel",   c:["#1E1815","#A32E2E","#F6F4F1"]},
   {v:"prairie",  t:"Prairie",  c:["#131A16","#2F6F4E","#F3F6F2"]},
   {v:"midnight", t:"Midnight", c:["#0A0E14","#F97316","#161D26"]},
-  {v:"graphite", t:"Graphite", c:["#0C0E0F","#14B8A6","#1B1E20"]}
+  {v:"graphite", t:"Graphite", c:["#0C0E0F","#14B8A6","#1B1E20"]},
+  {v:"linen",    t:"Linen",    c:["#FBF8F3","#8C3A46","#F7F4EE"]}
 ];
 
 function setField(f){
@@ -4760,7 +5502,8 @@ const V = {
   tagline:"Jobs, Tests & Certificates",
   skin:"midnight",
   design:{ type:"technical", shell:"split", surface:"outline",
-           density:"compact", dash:"kpi" },
+           density:"compact", dash:"kpi",
+           charts:{time:"bars", mix:"tree", part:"waffle", rank:"hbars", side:"hist"} },
   about:"Jobs, test time, certificates and the renewal pipeline for an electrical contractor — on your own computer. No account, no subscription, no internet needed.",
   dashSub:"The book, the tests and what is coming back",
   allClear:"No overdue certificates, no jobs waiting, nothing expiring.",
