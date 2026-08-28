@@ -1536,6 +1536,10 @@ const ICON = {
   trailer:_sv('<rect x="2.5" y="6.5" width="17" height="9" rx="1.5"/><path d="M19.5 12H22"/><circle cx="8" cy="18" r="1.6"/><circle cx="13" cy="18" r="1.6"/>'),
   driver: _sv('<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>'),
   people: _sv('<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 5.4a3.2 3.2 0 0 1 0 5.2"/><path d="M17.5 14.2A6.5 6.5 0 0 1 21.5 20"/>'),
+  /* ⚠ EV/MÜLK simgesi eksikti; tatil kiralama ve emlak dikeylerinde
+     `home` istenip sessizce `doc`a düşüyordu (ICON[p.i] || ICON.doc). */
+  home:   _sv('<path d="M3.5 10.5 12 3.5l8.5 7"/><path d="M5.5 9.4V20a.5.5 0 0 0 .5.5h12a.5.5 0 0 0 .5-.5V9.4"/><path d="M9.8 20.5v-6h4.4v6"/>'),
+  box:    _sv('<path d="M12 2.8 21 7.4v9.2L12 21.2 3 16.6V7.4z"/><path d="M3 7.4 12 12l9-4.6"/><path d="M12 12v9.2"/>'),
   broker: _sv('<path d="M3 21V8l6-4 6 4v13"/><path d="M15 21V11h6v10"/><path d="M1.5 21h21"/><path d="M7 12h2M7 16h2"/>'),
   invoice:_sv('<path d="M5 2.5h10l4 4V21a.5.5 0 0 1-.5.5H5A.5.5 0 0 1 4.5 21V3a.5.5 0 0 1 .5-.5z"/><path d="M14.5 2.5V7h4.5"/><path d="M8 12h8M8 16h5"/>'),
   cash:   _sv('<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 12h.01M18 12h.01"/>'),
@@ -6235,7 +6239,7 @@ V.entities.rooms = {
 
 V.entities.packages = {
   title:"Packages", sub:"Money taken, treatments still owed",
-  icon:"folder", noun:"package", addLabel:"Sell a package",
+  icon:"box", noun:"package", addLabel:"Sell a package",
   newTitle:"New package", editTitle:"Package", sort:"bought", dir:"desc",
   emptyTitle:"No packages sold",
   emptyText:"A block of six paid up front is cash today and work owed tomorrow. Track what is left so the money in the bank is not mistaken for profit.",
