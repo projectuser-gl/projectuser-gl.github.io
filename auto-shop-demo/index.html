@@ -3775,7 +3775,7 @@ function DEMO(){
   const NRO = 1420;              /* 3 usta · günde ~6 iş */
   for (let i = 0; i < NRO; i++){
     const plan = PLAN[i] || null;
-    const day = plan ? plan.day : -Math.floor(bt(16, 358));
+    const day = plan ? plan.day : -Math.floor(bt(16, 400));
     const veh = pick(vehicles);
     const tech = pick(techs);
     const service = pick(SERVICES);
@@ -3836,7 +3836,7 @@ function DEMO(){
 
   /* ── Giderler: 12 ay ── */
   const expenses = [];
-  for (let m = 11; m >= 0; m--){
+  for (let m = 13; m >= 0; m--){
     const base = -m * 30 - Math.floor(bt(1, 26));
     const mk = monthKey(D(base));
     /* Parça alımı o ayın gerçek parça maliyetine bağlı — uydurma sayı

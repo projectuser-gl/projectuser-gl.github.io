@@ -3885,7 +3885,7 @@ function DEMO(){
     let dov = CITIES[Math.floor(R() * CITIES.length)];
     while (dov[0] === pu[0]) dov = CITIES[Math.floor(R() * CITIES.length)];
     const plan = PLAN[i] || null;
-    const day = plan ? plan.day : -Math.floor(between(18, 358));
+    const day = plan ? plan.day : -Math.floor(between(18, 400));
     const miles = Math.round(between(180, 1650));
     const dh = Math.round(between(8, Math.min(220, miles * .28)));
     const target = between(1.72, 3.05);
@@ -3971,7 +3971,7 @@ function DEMO(){
 
   /* ── giderler ── */
   const expenses = [];
-  for (let m = 11; m >= 0; m--){
+  for (let m = 13; m >= 0; m--){
     const base = -m * 30 - Math.floor(between(1, 26));
     trucks.forEach(t => { if (t.payment) expenses.push({id:id(), date:D(base),
       category:"Truck payment", amount:t.payment, truckId:t.id,
