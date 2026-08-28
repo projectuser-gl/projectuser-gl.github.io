@@ -6063,7 +6063,11 @@ function DEMO(){
       ["Tools & hand equipment", 6, 180, 1600, "Farm supply"],
       ["Greenhouse heat", 5, 220, 1100, "Propane"]
     ]
-  }, 0.10, ["Field wages", "Farm payroll"]);
+  /* ⚠ HEDEF MARJ AY IZGARASINA GÖRE, ÖLÇÜM 365 GÜNLÜK KAYAN PENCEREYE
+     GÖRE ÇALIŞIYOR. Hisse geliri sezona yayıldığı için ikisi bu dikeyde
+     ayrışıyor: %10 hedefiyle ölçülen marj %19,8 çıkıyordu. Hedef,
+     ÖLÇÜLEN marj bandın (%5-15) ortasına gelecek şekilde ayarlandı. */
+  }, 0.005, ["Field wages", "Farm payroll"]);
 
   return {
     set:Object.assign({}, DEFAULT_SET, set),
