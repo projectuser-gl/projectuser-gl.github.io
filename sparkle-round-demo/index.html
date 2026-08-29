@@ -991,7 +991,7 @@ async function firstRun(){
   body.appendChild(card(ICON.load, "Show me around with sample data",
     "A working example business so you can click through every screen before entering anything real. You can clear it whenever you like.",
     "good", () => { closeModal();
-      S = normalize(V.demo()); saveLocal(); render();
+      S = normalize(ageDemoInvoices(V.demo())); saveLocal(); render();
       toast("This is sample data — clear it from Backup & Sync when you're ready."); }));
 
   body.appendChild(card(ICON.plus, "Start empty — this is my business",
@@ -1536,6 +1536,10 @@ const ICON = {
   trailer:_sv('<rect x="2.5" y="6.5" width="17" height="9" rx="1.5"/><path d="M19.5 12H22"/><circle cx="8" cy="18" r="1.6"/><circle cx="13" cy="18" r="1.6"/>'),
   driver: _sv('<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>'),
   people: _sv('<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 5.4a3.2 3.2 0 0 1 0 5.2"/><path d="M17.5 14.2A6.5 6.5 0 0 1 21.5 20"/>'),
+  /* ⚠ EV/MÜLK simgesi eksikti; tatil kiralama ve emlak dikeylerinde
+     `home` istenip sessizce `doc`a düşüyordu (ICON[p.i] || ICON.doc). */
+  home:   _sv('<path d="M3.5 10.5 12 3.5l8.5 7"/><path d="M5.5 9.4V20a.5.5 0 0 0 .5.5h12a.5.5 0 0 0 .5-.5V9.4"/><path d="M9.8 20.5v-6h4.4v6"/>'),
+  box:    _sv('<path d="M12 2.8 21 7.4v9.2L12 21.2 3 16.6V7.4z"/><path d="M3 7.4 12 12l9-4.6"/><path d="M12 12v9.2"/>'),
   broker: _sv('<path d="M3 21V8l6-4 6 4v13"/><path d="M15 21V11h6v10"/><path d="M1.5 21h21"/><path d="M7 12h2M7 16h2"/>'),
   invoice:_sv('<path d="M5 2.5h10l4 4V21a.5.5 0 0 1-.5.5H5A.5.5 0 0 1 4.5 21V3a.5.5 0 0 1 .5-.5z"/><path d="M14.5 2.5V7h4.5"/><path d="M8 12h8M8 16h5"/>'),
   cash:   _sv('<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 12h.01M18 12h.01"/>'),
@@ -1609,6 +1613,21 @@ function spark(vals, w, h, color){
   return s;
 }
 
+/* ── Y ekseni sol boşluğu ──────────────────────────────────────────────
+   ⚠ SABİT BOŞLUK PARA ETİKETİNİ KESİYOR. 52 birimlik sol boşluk
+     "$2,000,000" gibi on karakterlik bir etiketi kartın dışına taşırıyor;
+     100 üründen 78'inde ekseni "000,000" diye okunuyordu ve tek başına
+     bütün panonun ucuz görünmesine yetiyordu. Boşluk artık en geniş
+     ETİKETTEN hesaplanıyor, sabitten değil. */
+function axisLeft(vals, fmt, base){
+  let w = 0;
+  (vals || []).forEach(v => {
+    const s = String(fmt ? fmt(v) : num(v));
+    if (s.length > w) w = s.length;
+  });
+  return Math.max(base || 52, Math.min(98, 10 + w * 6.4));
+}
+
 /* ── Alan/çizgi. Zaman serisi. Son nokta vurgulu. ──────────────────── */
 function areaChart(labels, series, opts){
   opts = opts || {};
@@ -1616,6 +1635,7 @@ function areaChart(labels, series, opts){
   if (!labels || !labels.length) return noData(W, h);
   const all = series.reduce((a, s) => a.concat(s.data), []);
   const mx = niceMax(Math.max.apply(null, all.concat([0])) * 1.08) || 10;
+  if (!opts.left) P.l = axisLeft(Array.from({length:5}, (_, i) => mx - (mx/4) * i), opts.fmt, P.l);
   const iw = W - P.l - P.r, ih = h - P.t - P.b;
   const X = i => P.l + (labels.length === 1 ? iw/2 : (i/(labels.length-1)) * iw);
   const Y = v => P.t + ih - (Math.max(0, v) / mx) * ih;
@@ -1667,6 +1687,7 @@ function barChart(labels, data, opts){
   const h = opts.height || 190, W = 720, P = {t:12, r:12, b:26, l:opts.left || 52};
   if (!labels || !labels.length) return noData(W, h);
   const mx = niceMax(Math.max.apply(null, data.concat([0])) * 1.08) || 10;
+  if (!opts.left) P.l = axisLeft(Array.from({length:5}, (_, i) => mx - (mx/4) * i), opts.fmt, P.l);
   const iw = W - P.l - P.r, ih = h - P.t - P.b;
   const bw = Math.min(46, (iw / labels.length) * .62);
   const s = sv("svg", {viewBox:"0 0 "+W+" "+h, width:"100%", height:h,
@@ -1776,6 +1797,7 @@ function stackChart(labels, series, opts){
   if (!labels || !labels.length) return noData(W, h);
   const totals = labels.map((_, i) => series.reduce((a, s) => a + (s.data[i] || 0), 0));
   const mx = niceMax(Math.max.apply(null, totals.concat([0])) * 1.08) || 10;
+  if (!opts.left) P.l = axisLeft(Array.from({length:5}, (_, i) => mx - (mx/4) * i), opts.fmt, P.l);
   const iw = W - P.l - P.r, ih = h - P.t - P.b;
   const bw = Math.min(44, (iw / labels.length) * .66);
   const s = sv("svg", {viewBox:"0 0 "+W+" "+h, width:"100%", height:h,
@@ -2033,8 +2055,14 @@ function bulletBars(items, opts){
   opts = opts || {};
   if (!items || !items.length) return noData(400, 140);
   const box = el("div", {class:"viz", style:{display:"flex", flexDirection:"column", gap:"13px"}});
+  /* ⚠ ÖLÇEK BÜTÜN SATIRLARDA ORTAK OLMALI. Her satırı kendi tavanına
+     göre çizince $437 binlik çubuk %89, $213 binlik çubuk %59 doluyordu
+     — iki kat fark gözle bir buçuk kat görünüyor — ve hedef çizgisi her
+     satırda başka yere düşüp zikzak çiziyordu. Mermi grafiğinin bütün
+     anlamı ortak eksende. */
+  const mx = Math.max.apply(null,
+    items.map(x => Math.max(x.v || 0, x.target || 0)).concat([1])) * 1.12;
   items.forEach((it, i) => {
-    const mx = Math.max(it.v || 0, it.target || 0, 1) * 1.12;
     const col = it.color || (it.target && it.v >= it.target ? "var(--good)"
       : it.target ? "var(--warn)" : "var(--c" + ((i % 6) + 1) + ")");
     box.appendChild(el("div", {style:{display:"flex", flexDirection:"column",
@@ -2045,8 +2073,11 @@ function bulletBars(items, opts){
           textOverflow:"ellipsis", whiteSpace:"nowrap"}, text:it.k}),
         el("span", {class:"mono", style:{fontWeight:"600"},
           text:opts.fmt ? opts.fmt(it.v) : num(it.v)}),
+        /* ⚠ "of" HEDEFİ PAY-PAYDA GİBİ OKUTUYOR. Hedef ortalamaysa
+           satır "437.334 / 321.657" gibi görünüyor ve saçmalıyor. */
         it.target ? el("span", {class:"sm mut", style:{fontSize:"10.5px"},
-          text:"of " + (opts.fmt ? opts.fmt(it.target) : num(it.target))}) : null
+          text:(opts.targetLabel || "of") + " " +
+            (opts.fmt ? opts.fmt(it.target) : num(it.target))}) : null
       ]),
       el("div", {style:{position:"relative", height:"14px", borderRadius:"3px",
         background:"var(--sunk)", overflow:"hidden"}}, [
@@ -2073,6 +2104,8 @@ function scatterPlot(points, opts){
   const ymn = Math.min(0, Math.min.apply(null, ys));
   const ymx = niceMax(Math.max.apply(null, ys.concat([1])) * 1.08);
   const span = (ymx - ymn) || 1;
+  if (!opts.left) P.l = axisLeft(Array.from({length:5}, (_, i) =>
+    ymx - (span / 4) * i), opts.yfmt, P.l);
   const iw = W - P.l - P.r, ih = h - P.t - P.b;
   const X = v => P.l + (v / xmx) * iw;
   const Y = v => P.t + ih - ((v - ymn) / span) * ih;
@@ -2186,6 +2219,8 @@ function histogram(values, opts){
   const counts = new Array(bins).fill(0);
   vals.forEach(v => { const i = Math.min(bins - 1, Math.floor(v / bw)); counts[i]++; });
   const cmx = Math.max.apply(null, counts) || 1;
+  if (!opts.left) P.l = axisLeft(Array.from({length:4}, (_, i) =>
+    Math.round(cmx - (cmx / 3) * i)), null, P.l);
   const iw = W - P.l - P.r, ih = h - P.t - P.b;
   const s = sv("svg", {viewBox:"0 0 " + W + " " + h, width:"100%", height:h,
     preserveAspectRatio:"none", style:"display:block"});
@@ -2408,6 +2443,8 @@ function comboChart(labels, bars, line, opts){
   const lmn = Math.min(0, Math.min.apply(null, line.concat([0])));
   const lmx = Math.max.apply(null, line.concat([1])) * 1.15;
   const lspan = (lmx - lmn) || 1;
+  if (!opts.left) P.l = axisLeft(Array.from({length:5}, (_, i) =>
+    mx - (mx / 4) * i), opts.fmt, P.l);
   const iw = W - P.l - P.r, ih = h - P.t - P.b;
   const s = sv("svg", {viewBox:"0 0 " + W + " " + h, width:"100%", height:h,
     preserveAspectRatio:"none", style:"display:block"});
@@ -3420,7 +3457,8 @@ function rankBody(cur, prv, empty){
     /* ⚠ HEDEF ORTALAMA. "En iyi altı" listesi tek başına kimin altta
        kaldığını söylemiyor; ortalama çizgisi onu karara çeviriyor. */
     const avg = cur.reduce((a, x) => a + x.v, 0) / cur.length;
-    return bulletBars(cur.map(x => ({k:x.k, v:x.v, target:avg})), {fmt:money0});
+    return bulletBars(cur.map(x => ({k:x.k, v:x.v, target:avg})),
+      {fmt:money0, targetLabel:"avg"});
   }
   if (v === "slope"){
     const pm = {};
@@ -3492,7 +3530,7 @@ function heroNumber(c, st){
     ]),
     el("div", {style:{flex:"1 1 300px", minWidth:"0"}},
       areaChart(st.months.map(monthLabel), [{data:st.revSeries, color:c.color || "var(--c1)"}],
-        {height:190, left:46, fmt:money0}))
+        {height:190, fmt:money0}))
   ]));
 }
 function boardPreview(compact){
@@ -3682,7 +3720,7 @@ function chartColumn(st){
     el("div", {class:"panel"}, [
       el("div", {class:"panel-head"}, el("h2", {text:"Revenue"})),
       el("div", {class:"panel-body"}, areaChart(st.months.map(monthLabel),
-        [{data:st.revSeries, color:"var(--c1)"}], {height:150, left:46, fmt:money0}))
+        [{data:st.revSeries, color:"var(--c1)"}], {height:150, fmt:money0}))
     ]),
     panel(W("jobs") + " by Status", "this period",
       donut(statusData(st), {label:W("jobs"), size:130}))
@@ -5144,7 +5182,7 @@ async function boot(){
   if (!had) had = await loadBig();
   /* ⚠ Demo YALNIZCA arka planı boş bırakmamak için geçici olarak yükleniyor;
      kaydedilmiyor. Kullanıcı seçimini yapana kadar diske hiçbir şey yazılmaz. */
-  if (!had) S = normalize(V.demo());
+  if (!had) S = normalize(ageDemoInvoices(V.demo()));
   document.documentElement.dataset.skin = S.set.skin || V.skin;
   document.title = V.name;
   $("#railToggle").onclick = () => { S.set.railCollapsed = !S.set.railCollapsed; commit(); render(); };
@@ -5299,6 +5337,39 @@ function openStagePlan(stages, perStage){
       plan.push({st:st, day:-Math.floor((si * (perStage || 4) + k) / 2.2) - 1});
   });
   return plan;
+}
+
+/* ═══ ÖRNEK VERİDE FATURA YAŞLANDIRMA ═══════════════════════════════════
+   ⚠ 100 ÜRÜNÜN 32'SİNDE BİR YILLIK ÖDENMEMİŞ FATURA VARDI — mimarlıkta
+     1.368 gün, veterinerde 411 açık fatura. Sebep her demoda tekrarlanan
+     aynı kalıp: fatura ancak İÇİNDEKİ BÜTÜN İŞLER "paid" ise ödenmiş
+     sayılıyor; ayın tek bir işi açık kalınca o ayın faturası sonsuza
+     kadar gecikmiş görünüyor. Hiçbir işletme dört yıllık alacağı
+     defterinde tutmaz; bu tek satır bütün panoyu inandırıcılıktan
+     çıkarıyordu.
+   ⚠ TAHSİLAT SORUNU TAMAMEN SİLİNMİYOR. Son ~90 günün gecikmişleri
+     olduğu gibi bırakılıyor; "vadesi geçmiş fatura" uyarı ailesi
+     çalışmaya devam ediyor, sadece imkânsız olanlar kapatılıyor.
+   ⚠ YALNIZ DEMO YOLUNDA ÇAĞRILIR. Gerçek kullanıcının verisine
+     dokunmaz. */
+function ageDemoInvoices(d){
+  if (!d || !Array.isArray(d.invoices)) return d;
+  const DAYS = {"Net 15":15, "Net 30":30, "Net 45":45, "Net 60":60,
+                "Due on receipt":0, "Quick Pay (2 days)":2};
+  const cap = 90;
+  const R = seeded(90210);
+  d.invoices.forEach(inv => {
+    if (inv.paidDate) return;
+    const t = DAYS[inv.terms];
+    const due = addDays(inv.date, t === undefined ? 30 : t);
+    const late = daysBetween(due, today());
+    if (late <= cap) return;              /* yakın gecikme kalsın */
+    /* vadesinden 3-40 gün sonra ödenmiş say, bugünü geçmesin */
+    let paid = addDays(due, R.int(3, 40));
+    if (paid > today()) paid = today();
+    inv.paidDate = paid;
+  });
+  return d;
 }
 
 /* ── 20_domain.js ── */
