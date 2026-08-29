@@ -1240,6 +1240,17 @@ function normalize(d){
    yolda kalıyor; büyük veri açılışta IndexedDB'den geliyor. */
 const BIG = () => LS() + ":idb";
 let _big = false;
+/* ⚠ INDEXEDDB YAZMASI ASENKRON — VE SESSİZ. localStorage 5 MB'ı aşınca
+   büyük yola düşülüyor; orada `idbPut` sözü bir buçuk iki saniye sonra
+   çözülüyor. O aralıkta müşteri sekmeyi kapatırsa ya da sayfayı
+   yenilerse SON KAYIT UÇUYOR ve hiçbir yerde uyarı yok. Ölçtük: 10.177
+   kayıtlık bir dosyada (5,75 MB) yenileme 0 ms'de kaybediyor, 2.500
+   ms'de kurtarıyor. Bir kayıt girip kapağı kapatan kullanıcı için bu
+   sessiz veri kaybı demek — üründe kabul edilemez.
+   Çözüm: uçan yazma sayılıyor, sayfa kapanmak isterse tarayıcının
+   "ayrılsın mı" uyarısı tetikleniyor ve durum satırı "Saving…" diyor. */
+let _pending = 0;
+function savePending(){ return _pending > 0; }
 function saveLocal(){
   if (DEMO_MODE) return;                    /* demo hiçbir şey yazmaz */
   const raw = JSON.stringify(S);
@@ -1251,8 +1262,23 @@ function saveLocal(){
     localStorage.setItem(BIG(), "1");
     localStorage.removeItem(LS());          /* eski küçük kopya yanıltmasın */
   } catch(e){}
+  _pending++;
+  if (typeof paintSync === "function") try { paintSync(); } catch(e){}
   Promise.resolve().catch(function(){
     toast("Could not save locally — storage may be full.", "err");
+  }).finally(function(){
+    _pending = Math.max(0, _pending - 1);
+    if (typeof paintSync === "function") try { paintSync(); } catch(e){}
+  });
+}
+/* ⚠ KAPANIŞ KORUMASI. `preventDefault` yalnız kullanıcı sayfayla
+   etkileşmişse çalışır — kayıt giren kullanıcı zaten etkileşmiştir. */
+if (typeof window !== "undefined"){
+  window.addEventListener("beforeunload", function(e){
+    if (!savePending()) return;
+    e.preventDefault();
+    e.returnValue = "";
+    return "";
   });
 }
 function loadLocal(){
@@ -1673,7 +1699,10 @@ function areaChart(labels, series, opts){
   const step = Math.ceil(labels.length / 12);
   labels.forEach((L, i) => {
     if (i % step && i !== labels.length - 1) return;
-    const t = sv("text", {x:X(i), y:h-8, "text-anchor":"middle", fill:"var(--muted)",
+    /* ⚠ SON ETİKET ORTALANIRSA YARISI DIŞARI TAŞAR. Son ay çizimin sağ
+   kenarına düşüyor; "Jul 26" ortalanınca kartın dışına sarkıyor ve 100
+   üründen 18'inde görünüyordu. İlk ve son etiket kenara yaslanır. */
+    const t = sv("text", {x:X(i), y:h-8, "text-anchor":(i === 0 ? "start" : i === labels.length - 1 ? "end" : "middle"), fill:"var(--muted)",
       "font-size":"10", "font-family":"var(--f-ui)"});
     t.textContent = L;
     s.appendChild(t);
@@ -1705,7 +1734,7 @@ function barChart(labels, data, opts){
     const bh = Math.max(0, (Math.max(0,v) / mx) * ih);
     s.appendChild(sv("rect", {x:cx - bw/2, y:P.t + ih - bh, width:bw, height:bh,
       rx:3, fill:opts.color || "var(--accent)", opacity:opts.dim && i < data.length-1 ? .55 : 1}));
-    const t = sv("text", {x:cx, y:h-8, "text-anchor":"middle", fill:"var(--muted)",
+    const t = sv("text", {x:cx, y:h-8, "text-anchor":(i === 0 ? "start" : i === labels.length - 1 ? "end" : "middle"), fill:"var(--muted)",
       "font-size":"10", "font-family":"var(--f-ui)"});
     t.textContent = labels[i];
     s.appendChild(t);
@@ -1825,7 +1854,7 @@ function stackChart(labels, series, opts){
     });
     const step = Math.ceil(labels.length / 12);
     if (i % step === 0 || i === labels.length - 1){
-      const t = sv("text", {x:cx, y:h-8, "text-anchor":"middle", fill:"var(--muted)",
+      const t = sv("text", {x:cx, y:h-8, "text-anchor":(i === 0 ? "start" : i === labels.length - 1 ? "end" : "middle"), fill:"var(--muted)",
         "font-size":"10", "font-family":"var(--f-ui)"});
       t.textContent = L; s.appendChild(t);
     }
@@ -1995,12 +2024,12 @@ function waterfall(items, opts){
       s.appendChild(sv("line", {x1:cx + bw / 2, y1:Y(st.end),
         x2:nx - bw / 2, y2:Y(st.end), stroke:"var(--hair)", "stroke-dasharray":"2 2"}));
     }
-    const lab = sv("text", {x:cx, y:h - 27, "text-anchor":"middle",
+    const lab = sv("text", {x:cx, y:h - 27, "text-anchor":(i === 0 ? "start" : i === steps.length - 1 ? "end" : "middle"),
       fill:"var(--ink2)", "font-size":"10.5", "font-weight":"600",
       "font-family":"var(--f-num)"});
     lab.textContent = opts.fmt ? opts.fmt(Math.abs(st.v)) : num(Math.abs(st.v));
     s.appendChild(lab);
-    const t = sv("text", {x:cx, y:h - 11, "text-anchor":"middle", fill:"var(--muted)",
+    const t = sv("text", {x:cx, y:h - 11, "text-anchor":(i === 0 ? "start" : i === steps.length - 1 ? "end" : "middle"), fill:"var(--muted)",
       "font-size":"10", "font-family":"var(--f-ui)"});
     t.textContent = st.k.length > 15 ? st.k.slice(0, 14) + "…" : st.k;
     s.appendChild(t);
@@ -2476,7 +2505,10 @@ function comboChart(labels, bars, line, opts){
   const step = Math.ceil(labels.length / 12);
   labels.forEach((L, i) => {
     if (i % step && i !== labels.length - 1) return;
-    const t = sv("text", {x:X(i), y:h - 8, "text-anchor":"middle",
+    /* ⚠ SON ETİKET ORTALANIRSA YARISI DIŞARI TAŞAR. Son ay çizimin sağ
+   kenarına düşüyor; "Jul 26" ortalanınca kartın dışına sarkıyor ve 100
+   üründen 18'inde görünüyordu. İlk ve son etiket kenara yaslanır. */
+    const t = sv("text", {x:X(i), y:h - 8, "text-anchor":(i === 0 ? "start" : i === labels.length - 1 ? "end" : "middle"),
       fill:"var(--muted)", "font-size":"10", "font-family":"var(--f-ui)"});
     t.textContent = L;
     s.appendChild(t);
@@ -5133,7 +5165,13 @@ function paintSync(needsPermission){
     dot.className = "sync-dot"; txt.textContent = "Saved on this device";
     chip.title = browserName() + " can't save to a folder by itself — click to see what to do.";
   } else if (!DIR){
-    dot.className = "sync-dot off"; txt.textContent = "Not saved anywhere else";
+    /* ⚠ UÇAN YAZMA GÖRÜNÜR OLMALI. Kullanıcı kaydın diske indiğini
+       bilmeden kapatıyordu. */
+    if (typeof savePending === "function" && savePending()){
+      dot.className = "sync-dot warn"; txt.textContent = "Saving…";
+    } else {
+      dot.className = "sync-dot off"; txt.textContent = "Not saved anywhere else";
+    }
     chip.title = "Click to turn on automatic saving — takes about twenty seconds";
   } else if (needsPermission){
     dot.className = "sync-dot off"; txt.textContent = "Reconnect folder";
