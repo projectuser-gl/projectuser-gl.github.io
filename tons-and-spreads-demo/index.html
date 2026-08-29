@@ -991,7 +991,7 @@ async function firstRun(){
   body.appendChild(card(ICON.load, "Show me around with sample data",
     "A working example business so you can click through every screen before entering anything real. You can clear it whenever you like.",
     "good", () => { closeModal();
-      S = normalize(V.demo()); saveLocal(); render();
+      S = normalize(ageDemoInvoices(V.demo())); saveLocal(); render();
       toast("This is sample data — clear it from Backup & Sync when you're ready."); }));
 
   body.appendChild(card(ICON.plus, "Start empty — this is my business",
@@ -1613,6 +1613,21 @@ function spark(vals, w, h, color){
   return s;
 }
 
+/* ── Y ekseni sol boşluğu ──────────────────────────────────────────────
+   ⚠ SABİT BOŞLUK PARA ETİKETİNİ KESİYOR. 52 birimlik sol boşluk
+     "$2,000,000" gibi on karakterlik bir etiketi kartın dışına taşırıyor;
+     100 üründen 78'inde ekseni "000,000" diye okunuyordu ve tek başına
+     bütün panonun ucuz görünmesine yetiyordu. Boşluk artık en geniş
+     ETİKETTEN hesaplanıyor, sabitten değil. */
+function axisLeft(vals, fmt, base){
+  let w = 0;
+  (vals || []).forEach(v => {
+    const s = String(fmt ? fmt(v) : num(v));
+    if (s.length > w) w = s.length;
+  });
+  return Math.max(base || 52, Math.min(98, 10 + w * 6.4));
+}
+
 /* ── Alan/çizgi. Zaman serisi. Son nokta vurgulu. ──────────────────── */
 function areaChart(labels, series, opts){
   opts = opts || {};
@@ -1620,6 +1635,7 @@ function areaChart(labels, series, opts){
   if (!labels || !labels.length) return noData(W, h);
   const all = series.reduce((a, s) => a.concat(s.data), []);
   const mx = niceMax(Math.max.apply(null, all.concat([0])) * 1.08) || 10;
+  if (!opts.left) P.l = axisLeft(Array.from({length:5}, (_, i) => mx - (mx/4) * i), opts.fmt, P.l);
   const iw = W - P.l - P.r, ih = h - P.t - P.b;
   const X = i => P.l + (labels.length === 1 ? iw/2 : (i/(labels.length-1)) * iw);
   const Y = v => P.t + ih - (Math.max(0, v) / mx) * ih;
@@ -1671,6 +1687,7 @@ function barChart(labels, data, opts){
   const h = opts.height || 190, W = 720, P = {t:12, r:12, b:26, l:opts.left || 52};
   if (!labels || !labels.length) return noData(W, h);
   const mx = niceMax(Math.max.apply(null, data.concat([0])) * 1.08) || 10;
+  if (!opts.left) P.l = axisLeft(Array.from({length:5}, (_, i) => mx - (mx/4) * i), opts.fmt, P.l);
   const iw = W - P.l - P.r, ih = h - P.t - P.b;
   const bw = Math.min(46, (iw / labels.length) * .62);
   const s = sv("svg", {viewBox:"0 0 "+W+" "+h, width:"100%", height:h,
@@ -1780,6 +1797,7 @@ function stackChart(labels, series, opts){
   if (!labels || !labels.length) return noData(W, h);
   const totals = labels.map((_, i) => series.reduce((a, s) => a + (s.data[i] || 0), 0));
   const mx = niceMax(Math.max.apply(null, totals.concat([0])) * 1.08) || 10;
+  if (!opts.left) P.l = axisLeft(Array.from({length:5}, (_, i) => mx - (mx/4) * i), opts.fmt, P.l);
   const iw = W - P.l - P.r, ih = h - P.t - P.b;
   const bw = Math.min(44, (iw / labels.length) * .66);
   const s = sv("svg", {viewBox:"0 0 "+W+" "+h, width:"100%", height:h,
@@ -2037,8 +2055,14 @@ function bulletBars(items, opts){
   opts = opts || {};
   if (!items || !items.length) return noData(400, 140);
   const box = el("div", {class:"viz", style:{display:"flex", flexDirection:"column", gap:"13px"}});
+  /* ⚠ ÖLÇEK BÜTÜN SATIRLARDA ORTAK OLMALI. Her satırı kendi tavanına
+     göre çizince $437 binlik çubuk %89, $213 binlik çubuk %59 doluyordu
+     — iki kat fark gözle bir buçuk kat görünüyor — ve hedef çizgisi her
+     satırda başka yere düşüp zikzak çiziyordu. Mermi grafiğinin bütün
+     anlamı ortak eksende. */
+  const mx = Math.max.apply(null,
+    items.map(x => Math.max(x.v || 0, x.target || 0)).concat([1])) * 1.12;
   items.forEach((it, i) => {
-    const mx = Math.max(it.v || 0, it.target || 0, 1) * 1.12;
     const col = it.color || (it.target && it.v >= it.target ? "var(--good)"
       : it.target ? "var(--warn)" : "var(--c" + ((i % 6) + 1) + ")");
     box.appendChild(el("div", {style:{display:"flex", flexDirection:"column",
@@ -2049,8 +2073,11 @@ function bulletBars(items, opts){
           textOverflow:"ellipsis", whiteSpace:"nowrap"}, text:it.k}),
         el("span", {class:"mono", style:{fontWeight:"600"},
           text:opts.fmt ? opts.fmt(it.v) : num(it.v)}),
+        /* ⚠ "of" HEDEFİ PAY-PAYDA GİBİ OKUTUYOR. Hedef ortalamaysa
+           satır "437.334 / 321.657" gibi görünüyor ve saçmalıyor. */
         it.target ? el("span", {class:"sm mut", style:{fontSize:"10.5px"},
-          text:"of " + (opts.fmt ? opts.fmt(it.target) : num(it.target))}) : null
+          text:(opts.targetLabel || "of") + " " +
+            (opts.fmt ? opts.fmt(it.target) : num(it.target))}) : null
       ]),
       el("div", {style:{position:"relative", height:"14px", borderRadius:"3px",
         background:"var(--sunk)", overflow:"hidden"}}, [
@@ -2077,6 +2104,8 @@ function scatterPlot(points, opts){
   const ymn = Math.min(0, Math.min.apply(null, ys));
   const ymx = niceMax(Math.max.apply(null, ys.concat([1])) * 1.08);
   const span = (ymx - ymn) || 1;
+  if (!opts.left) P.l = axisLeft(Array.from({length:5}, (_, i) =>
+    ymx - (span / 4) * i), opts.yfmt, P.l);
   const iw = W - P.l - P.r, ih = h - P.t - P.b;
   const X = v => P.l + (v / xmx) * iw;
   const Y = v => P.t + ih - ((v - ymn) / span) * ih;
@@ -2190,6 +2219,8 @@ function histogram(values, opts){
   const counts = new Array(bins).fill(0);
   vals.forEach(v => { const i = Math.min(bins - 1, Math.floor(v / bw)); counts[i]++; });
   const cmx = Math.max.apply(null, counts) || 1;
+  if (!opts.left) P.l = axisLeft(Array.from({length:4}, (_, i) =>
+    Math.round(cmx - (cmx / 3) * i)), null, P.l);
   const iw = W - P.l - P.r, ih = h - P.t - P.b;
   const s = sv("svg", {viewBox:"0 0 " + W + " " + h, width:"100%", height:h,
     preserveAspectRatio:"none", style:"display:block"});
@@ -2412,6 +2443,8 @@ function comboChart(labels, bars, line, opts){
   const lmn = Math.min(0, Math.min.apply(null, line.concat([0])));
   const lmx = Math.max.apply(null, line.concat([1])) * 1.15;
   const lspan = (lmx - lmn) || 1;
+  if (!opts.left) P.l = axisLeft(Array.from({length:5}, (_, i) =>
+    mx - (mx / 4) * i), opts.fmt, P.l);
   const iw = W - P.l - P.r, ih = h - P.t - P.b;
   const s = sv("svg", {viewBox:"0 0 " + W + " " + h, width:"100%", height:h,
     preserveAspectRatio:"none", style:"display:block"});
@@ -3424,7 +3457,8 @@ function rankBody(cur, prv, empty){
     /* ⚠ HEDEF ORTALAMA. "En iyi altı" listesi tek başına kimin altta
        kaldığını söylemiyor; ortalama çizgisi onu karara çeviriyor. */
     const avg = cur.reduce((a, x) => a + x.v, 0) / cur.length;
-    return bulletBars(cur.map(x => ({k:x.k, v:x.v, target:avg})), {fmt:money0});
+    return bulletBars(cur.map(x => ({k:x.k, v:x.v, target:avg})),
+      {fmt:money0, targetLabel:"avg"});
   }
   if (v === "slope"){
     const pm = {};
@@ -3496,7 +3530,7 @@ function heroNumber(c, st){
     ]),
     el("div", {style:{flex:"1 1 300px", minWidth:"0"}},
       areaChart(st.months.map(monthLabel), [{data:st.revSeries, color:c.color || "var(--c1)"}],
-        {height:190, left:46, fmt:money0}))
+        {height:190, fmt:money0}))
   ]));
 }
 function boardPreview(compact){
@@ -3686,7 +3720,7 @@ function chartColumn(st){
     el("div", {class:"panel"}, [
       el("div", {class:"panel-head"}, el("h2", {text:"Revenue"})),
       el("div", {class:"panel-body"}, areaChart(st.months.map(monthLabel),
-        [{data:st.revSeries, color:"var(--c1)"}], {height:150, left:46, fmt:money0}))
+        [{data:st.revSeries, color:"var(--c1)"}], {height:150, fmt:money0}))
     ]),
     panel(W("jobs") + " by Status", "this period",
       donut(statusData(st), {label:W("jobs"), size:130}))
@@ -5148,7 +5182,7 @@ async function boot(){
   if (!had) had = await loadBig();
   /* ⚠ Demo YALNIZCA arka planı boş bırakmamak için geçici olarak yükleniyor;
      kaydedilmiyor. Kullanıcı seçimini yapana kadar diske hiçbir şey yazılmaz. */
-  if (!had) S = normalize(V.demo());
+  if (!had) S = normalize(ageDemoInvoices(V.demo()));
   document.documentElement.dataset.skin = S.set.skin || V.skin;
   document.title = V.name;
   $("#railToggle").onclick = () => { S.set.railCollapsed = !S.set.railCollapsed; commit(); render(); };
@@ -5303,6 +5337,39 @@ function openStagePlan(stages, perStage){
       plan.push({st:st, day:-Math.floor((si * (perStage || 4) + k) / 2.2) - 1});
   });
   return plan;
+}
+
+/* ═══ ÖRNEK VERİDE FATURA YAŞLANDIRMA ═══════════════════════════════════
+   ⚠ 100 ÜRÜNÜN 32'SİNDE BİR YILLIK ÖDENMEMİŞ FATURA VARDI — mimarlıkta
+     1.368 gün, veterinerde 411 açık fatura. Sebep her demoda tekrarlanan
+     aynı kalıp: fatura ancak İÇİNDEKİ BÜTÜN İŞLER "paid" ise ödenmiş
+     sayılıyor; ayın tek bir işi açık kalınca o ayın faturası sonsuza
+     kadar gecikmiş görünüyor. Hiçbir işletme dört yıllık alacağı
+     defterinde tutmaz; bu tek satır bütün panoyu inandırıcılıktan
+     çıkarıyordu.
+   ⚠ TAHSİLAT SORUNU TAMAMEN SİLİNMİYOR. Son ~90 günün gecikmişleri
+     olduğu gibi bırakılıyor; "vadesi geçmiş fatura" uyarı ailesi
+     çalışmaya devam ediyor, sadece imkânsız olanlar kapatılıyor.
+   ⚠ YALNIZ DEMO YOLUNDA ÇAĞRILIR. Gerçek kullanıcının verisine
+     dokunmaz. */
+function ageDemoInvoices(d){
+  if (!d || !Array.isArray(d.invoices)) return d;
+  const DAYS = {"Net 15":15, "Net 30":30, "Net 45":45, "Net 60":60,
+                "Due on receipt":0, "Quick Pay (2 days)":2};
+  const cap = 90;
+  const R = seeded(90210);
+  d.invoices.forEach(inv => {
+    if (inv.paidDate) return;
+    const t = DAYS[inv.terms];
+    const due = addDays(inv.date, t === undefined ? 30 : t);
+    const late = daysBetween(due, today());
+    if (late <= cap) return;              /* yakın gecikme kalsın */
+    /* vadesinden 3-40 gün sonra ödenmiş say, bugünü geçmesin */
+    let paid = addDays(due, R.int(3, 40));
+    if (paid > today()) paid = today();
+    inv.paidDate = paid;
+  });
+  return d;
 }
 
 /* ── 20_domain.js ── */
@@ -5861,10 +5928,17 @@ function DEMO(){
             R.chance(.4)))
         : R.chance(.72) ? R.pick(ferrous) : R.pick(metals);
       const band = m._band;
-      const tons = peddler
-        ? Math.round(R.bt(.02, .9) * 1000) / 1000
-        : c.kind === "demo" ? Math.round(R.bt(6, 42) * 100) / 100
-        : Math.round(R.bt(.6, 14) * 100) / 100;
+      /* ⚠ TONAJ METALİN SINIFINDAN. Tedarikçi tipine bakıp herkese ton
+         yazınca yıkım müteahhidi "kırk ton katalizör" getiriyordu —
+         yaklaşık 4.000 konvertör, 850 bin dolar. Demir tonla, bakır
+         kilo mertebesinde, katalizör tane tane gelir. */
+      const bulk = {ferrous:1, alum:.34, stain:.24, lead:.30,
+        brass:.13, copper:.11, elec:.11, cat:.005}[m.klass] || .15;
+      const tons = Math.round((peddler
+        ? R.bt(.02, .9) * Math.min(1, bulk * 6)
+        : c.kind === "demo" ? R.bt(6, 42) * bulk
+        : R.bt(.6, 14) * bulk) * 1000) / 1000;
+      if (tons < 0.004) continue;
       /* alış = piyasa − makas (tüccarda makas daha geniş) */
       /* ⚠ SIKIŞAN METALDE KANTAR FİYATI PİYASAYA YAKLAŞIYOR. */
       const spread = R.bt(band[0], band[1]) / 100 *
@@ -5934,7 +6008,7 @@ function DEMO(){
       const full = m.klass === "ferrous" ? R.bt(20, 24)
         : m.klass === "cat" ? R.bt(.3, .9)
         : R.bt(1.2, 20);
-      if (S2.tons < full * 1.05) return;
+      if (S2.tons < full * 1.7) return;
       /* ⚠ SEVKİYAT SIKLIĞI STOKA GÖRE: elde ne kadar çok mal varsa o
          kadar sık kamyon çıkıyor. Sabit düşük olasılık yazınca saha
          279 günlük stok biriktiriyordu; band 8-25 gün. */
@@ -6074,6 +6148,20 @@ function DEMO(){
     ]
   }, 0.055, ["Owner draw and payroll", "Payroll"]);
 
+  /* ⚠ AÇILIŞ STOKU PENCEREYLE UYUMLU OLMALI. Simülasyon 400 gün,
+     pano 365 gün bakıyor; aradaki 35 günün alımları pencerenin dışında
+     kalınca "eksi 11 ton stok" gibi imkânsız satırlar çıkıyordu.
+     Açılış, bugünkü gerçek stoktan geriye doğru hesaplanıyor. */
+  const cut = D(-365);
+  metals.forEach(m => {
+    const onHand = stock[m.id] ? stock[m.id].tons : 0;
+    const boughtY = purchases.filter(P => P.metalId === m.id &&
+      P.date >= cut).reduce((a, P) => a + n0(P.tons), 0);
+    const shippedY = loads.filter(L => L.metalId === m.id &&
+      L.onDate >= cut).reduce((a, L) => a + n0(L.tons), 0);
+    m.opening = Math.max(0, Math.round((onHand - boughtY + shippedY) *
+      100) / 100);
+  });
   metals.forEach(m => { delete m._band; delete m._squeeze; });
 
   return {
