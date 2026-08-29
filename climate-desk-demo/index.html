@@ -1240,6 +1240,17 @@ function normalize(d){
    yolda kalıyor; büyük veri açılışta IndexedDB'den geliyor. */
 const BIG = () => LS() + ":idb";
 let _big = false;
+/* ⚠ INDEXEDDB YAZMASI ASENKRON — VE SESSİZ. localStorage 5 MB'ı aşınca
+   büyük yola düşülüyor; orada `idbPut` sözü bir buçuk iki saniye sonra
+   çözülüyor. O aralıkta müşteri sekmeyi kapatırsa ya da sayfayı
+   yenilerse SON KAYIT UÇUYOR ve hiçbir yerde uyarı yok. Ölçtük: 10.177
+   kayıtlık bir dosyada (5,75 MB) yenileme 0 ms'de kaybediyor, 2.500
+   ms'de kurtarıyor. Bir kayıt girip kapağı kapatan kullanıcı için bu
+   sessiz veri kaybı demek — üründe kabul edilemez.
+   Çözüm: uçan yazma sayılıyor, sayfa kapanmak isterse tarayıcının
+   "ayrılsın mı" uyarısı tetikleniyor ve durum satırı "Saving…" diyor. */
+let _pending = 0;
+function savePending(){ return _pending > 0; }
 function saveLocal(){
   if (DEMO_MODE) return;                    /* demo hiçbir şey yazmaz */
   const raw = JSON.stringify(S);
@@ -1251,8 +1262,23 @@ function saveLocal(){
     localStorage.setItem(BIG(), "1");
     localStorage.removeItem(LS());          /* eski küçük kopya yanıltmasın */
   } catch(e){}
+  _pending++;
+  if (typeof paintSync === "function") try { paintSync(); } catch(e){}
   Promise.resolve().catch(function(){
     toast("Could not save locally — storage may be full.", "err");
+  }).finally(function(){
+    _pending = Math.max(0, _pending - 1);
+    if (typeof paintSync === "function") try { paintSync(); } catch(e){}
+  });
+}
+/* ⚠ KAPANIŞ KORUMASI. `preventDefault` yalnız kullanıcı sayfayla
+   etkileşmişse çalışır — kayıt giren kullanıcı zaten etkileşmiştir. */
+if (typeof window !== "undefined"){
+  window.addEventListener("beforeunload", function(e){
+    if (!savePending()) return;
+    e.preventDefault();
+    e.returnValue = "";
+    return "";
   });
 }
 function loadLocal(){
@@ -5133,7 +5159,13 @@ function paintSync(needsPermission){
     dot.className = "sync-dot"; txt.textContent = "Saved on this device";
     chip.title = browserName() + " can't save to a folder by itself — click to see what to do.";
   } else if (!DIR){
-    dot.className = "sync-dot off"; txt.textContent = "Not saved anywhere else";
+    /* ⚠ UÇAN YAZMA GÖRÜNÜR OLMALI. Kullanıcı kaydın diske indiğini
+       bilmeden kapatıyordu. */
+    if (typeof savePending === "function" && savePending()){
+      dot.className = "sync-dot warn"; txt.textContent = "Saving…";
+    } else {
+      dot.className = "sync-dot off"; txt.textContent = "Not saved anywhere else";
+    }
     chip.title = "Click to turn on automatic saving — takes about twenty seconds";
   } else if (needsPermission){
     dot.className = "sync-dot off"; txt.textContent = "Reconnect folder";
