@@ -5342,6 +5342,143 @@ function cloudWatch(){
   });
 }
 
+/* ── 39_install.js ── */
+/* ═══ ANA EKRANA EKLEME ═════════════════════════════════════════════════
+   ⚠ İKİ AYRI DERDİ BİRDEN ÇÖZÜYOR:
+     1) "Her seferinde linke girmek" — ana ekranda simge oluyor, adres
+        çubuğu yok, uygulama gibi açılıyor.
+     2) SAFARI'NİN 7 GÜNLÜK SİLMESİ — WebKit'in kendi açıklaması: ana
+        ekrana eklenen web uygulaması Safari'nin parçası SAYILMIYOR, kendi
+        kullanım sayacı var ve verisi silinmiyor. Yani telefonda veriyi
+        ayakta tutan şey bu; "isteğe bağlı güzellik" değil.
+   ⚠ APPLE-TOUCH-ICON PNG OLMAK ZORUNDA. iOS SVG kabul etmiyor; sekme
+     ikonundaki SVG'yi buraya koyunca simge boş çıkıyor. Canvas'ta
+     çiziliyor — SVG'yi canvas'a basmak bazı tarayıcılarda tuvali
+     kirletiyor, o yüzden 2D ilkellerle.
+   ⚠ SADECE BARINDIRILAN SÜRÜMDE. file:// ile açılan masaüstü kopyasında
+     ana ekran diye bir şey yok; orada bu şerit gürültü olurdu.          */
+
+const HOSTED = location.protocol === "http:" || location.protocol === "https:";
+const STANDALONE = (window.matchMedia &&
+    window.matchMedia("(display-mode: standalone)").matches) ||
+  navigator.standalone === true;
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const SMALL = window.matchMedia && window.matchMedia("(max-width: 900px)").matches;
+
+function accentHex(){
+  try {
+    const c = getComputedStyle(document.documentElement)
+      .getPropertyValue("--accent").trim();
+    return c || "#E8590C";
+  } catch(e){ return "#E8590C"; }
+}
+function brandInitials(){
+  const n = (S.set.company || V.name || "App").replace(/[^A-Za-z0-9 ]/g, " ").trim();
+  const w = n.split(/\s+/).filter(Boolean);
+  return ((w[0] || "A")[0] + (w[1] ? w[1][0] : (w[0] || "A")[1] || "")).toUpperCase();
+}
+function touchIconPNG(size){
+  try {
+    const c = document.createElement("canvas");
+    c.width = c.height = size;
+    const x = c.getContext("2d");
+    const r = size * 0.22;
+    x.fillStyle = "#161C24";
+    x.beginPath();
+    if (x.roundRect) x.roundRect(0, 0, size, size, r); else x.rect(0, 0, size, size);
+    x.fill();
+    x.fillStyle = accentHex();
+    x.beginPath();
+    const p = size * 0.16, s2 = size - p * 2, r2 = s2 * 0.2;
+    if (x.roundRect) x.roundRect(p, p, s2, s2, r2); else x.rect(p, p, s2, s2);
+    x.fill();
+    x.fillStyle = "#FFFFFF";
+    x.font = "600 " + Math.round(size * 0.38) + "px -apple-system,Helvetica,Arial,sans-serif";
+    x.textAlign = "center"; x.textBaseline = "middle";
+    x.fillText(brandInitials(), size / 2, size / 2 + size * 0.02);
+    return c.toDataURL("image/png");
+  } catch(e){ return ""; }
+}
+
+function setMeta(name, content){
+  let m = document.querySelector('meta[name="' + name + '"]');
+  if (!m){ m = document.createElement("meta"); m.name = name; document.head.appendChild(m); }
+  m.content = content;
+}
+function setLink(rel, href, extra){
+  let l = document.querySelector('link[rel="' + rel + '"][data-inst]');
+  if (!l){ l = document.createElement("link"); l.rel = rel;
+    l.setAttribute("data-inst", "1"); document.head.appendChild(l); }
+  l.href = href;
+  if (extra) for (const k in extra) l.setAttribute(k, extra[k]);
+}
+
+function installMeta(){
+  if (!HOSTED) return;
+  const name = (S.set.company || V.name);
+  setMeta("apple-mobile-web-app-capable", "yes");
+  setMeta("mobile-web-app-capable", "yes");
+  setMeta("apple-mobile-web-app-status-bar-style", "black-translucent");
+  setMeta("apple-mobile-web-app-title", name.slice(0, 24));
+  setMeta("theme-color", "#161C24");
+  const png = touchIconPNG(180);
+  if (png) setLink("apple-touch-icon", png, {sizes:"180x180"});
+  /* ⚠ MANIFEST DE GÖMÜLÜ. Ayrı dosya tek-dosya kuralını bozardı;
+     data URI olarak veriliyor, Chrome bunu kabul ediyor. */
+  const big = touchIconPNG(512);
+  const man = {name:name, short_name:name.slice(0, 12), start_url:location.pathname,
+    display:"standalone", background_color:"#161C24", theme_color:"#161C24",
+    icons:big ? [{src:big, sizes:"512x512", type:"image/png", purpose:"any"}] : []};
+  try {
+    setLink("manifest", "data:application/manifest+json;charset=utf-8," +
+      encodeURIComponent(JSON.stringify(man)));
+  } catch(e){}
+}
+
+/* ── Kurulum şeridi ─────────────────────────────────────────────────── */
+let _deferredPrompt = null;
+if (typeof window !== "undefined"){
+  window.addEventListener("beforeinstallprompt", e => {
+    e.preventDefault(); _deferredPrompt = e;
+    try { installBar(); } catch(err){}
+  });
+}
+const INST_KEY = () => APP() + ":inst-hid";
+
+function installBar(){
+  if (!HOSTED || STANDALONE || DEMO_MODE) return;
+  if (!SMALL && !_deferredPrompt) return;
+  try { if (localStorage.getItem(INST_KEY())) return; } catch(e){}
+  if (document.getElementById("instBar")) return;
+  const how = IOS
+    ? "Tap the Share button below, then Add to Home Screen."
+    : "Tap Install and it lives on your home screen like any app.";
+  const bar = el("div", {id:"instBar", style:{position:"fixed", left:"10px",
+    right:"10px", bottom:"10px", zIndex:"96", display:"flex", gap:"11px",
+    alignItems:"flex-start", padding:"12px 14px", borderRadius:"12px",
+    background:"var(--rail)", color:"var(--rail-active)",
+    border:"1px solid var(--rail-hair)", fontSize:"12.5px",
+    boxShadow:"0 6px 22px rgba(0,0,0,.28)"}}, [
+    el("div", {style:{flex:"1", minWidth:"0", lineHeight:"1.55"}}, [
+      el("b", {text:"Put this on your home screen. "}),
+      el("span", {style:{opacity:".85"}, text:how + " It opens like an app — " +
+        "no address to type — and your records stop being deleted after a week " +
+        "of not opening it."})
+    ]),
+    _deferredPrompt ? el("button", {class:"btn pri", style:{flex:"0 0 auto"},
+      text:"Install", onclick:async () => {
+        const p = _deferredPrompt; _deferredPrompt = null;
+        bar.remove();
+        try { p.prompt(); await p.userChoice; } catch(e){}
+      }}) : null,
+    el("button", {class:"btn ghost", style:{flex:"0 0 auto"}, text:"Not now",
+      onclick:() => { bar.remove();
+        try { localStorage.setItem(INST_KEY(), "1"); } catch(e){} }})
+  ]);
+  document.body.appendChild(bar);
+}
+
 /* ── 40_shell.js ── */
 /* ═══ KABUK + YÖNLENDİRME (ÇEKİRDEK) ════════════════════════════════════
    Sayfa listesi config'ten TÜRETİLİR, elle yazılmaz.
@@ -5515,6 +5652,10 @@ async function boot(){
   await resumeFolder();
   /* ⚠ SIRA: once kayitli oturum, sonra donusteki ?code=. Ters sirada
      yeni token eskisini ezmeden diske yaziliyor ve baglanti kayboluyor. */
+  /* ⚠ ANA EKRAN ŞERİDİ BULUTTAN ÖNCE. Telefonda veriyi ayakta tutan asıl
+     şey ana ekrana eklemek; bulut onun yedeği. */
+  installMeta();
+  installBar();
   if (CLOUD_OK()){
     await dbxResume();
     if (await dbxFinishRedirect()){
