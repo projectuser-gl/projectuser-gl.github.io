@@ -5844,12 +5844,8 @@ function DEMO(){
     lostWhy:"— none —", notes:""}, o)); };
   /* satış penceresi: mart-haziran ana, eylül-ekim ikincil,
      kasım-aralık tatil, ocak-şubat çıplak köklü */
-  /* ⚠ KIŞ SIFIR DEĞİL. Ocak-şubatta çıplak köklü ve uyku halinde
-     sevkiyat, kasım-aralıkta tatil bitkisi çıkıyor. Kış ağırlıkları
-     çok düşük yazılınca grafikte boş ay kalıyor ve saat bir yıl ileri
-     alındığında ürün ölü görünüyor. */
-  const sellW = mo => [.34, .36, .78, 1.00, .96, .62, .22, .26, .58,
-    .50, .42, .40][mo];
+  const sellW = mo => [.16, .20, .78, 1.00, .96, .62, .22, .26, .58,
+    .50, .28, .22][mo];
   const space = {};
   blocks.forEach(b => space[b.id] = 0);
 
@@ -5954,6 +5950,55 @@ function DEMO(){
         space[blk.id] += (pottedQty - lostQty - sold) * p.sqft;
     }
   }
+
+  /* ⚠ KIŞ AYLARI BOŞ KALMAMALI — AMA PENCEREYİ DE BOZMAMALI.
+     Satış ağırlığını kışın yükseltmek ilkbahar payını %66'dan %37'ye
+     düşürüyordu; band %55-75. Bunun yerine boş kalan aya çıplak köklü
+     ve uyku halinde birkaç parti yazılıyor: gerçek fidanlıkta kışın
+     olan tam da bu, hacim küçük ama sıfır değil. */
+  const monthsSeen = {};
+  for (let i = 13; i >= 0; i--){
+    const dt = parseD(today());
+    const x = new Date(dt.getFullYear(), dt.getMonth() - i, 1);
+    monthsSeen[x.getFullYear() + "-" +
+      String(x.getMonth() + 1).padStart(2, "0")] = 0;
+  }
+  crops.forEach(C => { if (C.soldOn && C.sold > 0){
+    const k = monthKey(C.soldOn);
+    if (k in monthsSeen) monthsSeen[k] += C.sold * C.price;
+  }});
+  Object.keys(monthsSeen).forEach(k => {
+    if (monthsSeen[k] > 4000) return;
+    let pool = crops.filter(C => !C.soldOn && C.readyOn &&
+      C.readyOn <= k + "-15" && (C.potted - C.lostQty) > 0);
+    /* ⚠ HAVUZ BOŞSA KOMŞU AYDAN KAYDIR. En eski ayda satılmamış hazır
+       parti kalmıyor ve ay boş çıkıyordu; o ayın satışını tamamen
+       uydurmak yerine bitişik aydan birkaç sevkiyat öne alınıyor. */
+    if (!pool.length){
+      pool = crops.filter(C => C.soldOn && C.sold > 0 &&
+        Math.abs(daysBetween(k + "-15", C.soldOn)) <= 46);
+      pool.slice(0, R.int(3, 6)).forEach(C => {
+        C.soldOn = k + "-" + String(R.int(8, 22)).padStart(2, "0");
+      });
+      return;
+    }
+    const take = Math.min(pool.length, R.int(3, 7));
+    for (let i = 0; i < take; i++){
+      const C = pool[i];
+      const c = R.pick(live.filter(x => x.channel === "landscape" ||
+        x.channel === "wholesale") || live);
+      const s = species.find(x => x.id === C.speciesId);
+      const usable = C.potted - C.lostQty;
+      C.sold = Math.round(usable * R.bt(.55, .92));
+      C.soldOn = k + "-" + String(R.int(6, 24)).padStart(2, "0");
+      C.clientId = c.id; C.channel = c.channel;
+      C.price = Math.round(n0(s ? s.price : 6) *
+        R.bt(.86, 1.02) * (1 - n0(c.discount) / 100) * 100) / 100;
+      C.status = daysBetween(C.soldOn, today()) > 45 ? "paid"
+        : daysBetween(C.soldOn, today()) > 12 ? "invoiced" : "selling";
+      C.notes = "Dormant and bare root; shipped out of season";
+    }
+  });
 
   /* ⚠ TOPTANCIYA DÖKÜLEN PARTİLER: sezon sonunda yerde kalanı broker
      maliyetin altına alıyor. Bu satır olmadan "maliyetin altında
