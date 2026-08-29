@@ -5534,8 +5534,11 @@ function noPayWells(from, to){
   return doneWells(from, to).filter(noPay)
     .sort((a, b) => wellCost(b) - wellCost(a));
 }
+/* ⚠ TOPLAM ORAN DA DELME GÜNÜNE BÖLÜNMELİ. Tek tek kuyularda
+   düzeltilip toplamda makine gününe bölmek panoyu kendi sütunuyla
+   çelişkiye düşürüyordu. */
 function feetPerDayOverall(from, to){
-  const d = doneWells(from, to).reduce((a, W) => a + n0(W.rigDays), 0);
+  const d = doneWells(from, to).reduce((a, W) => a + drillDays(W), 0);
   return d ? feetIn(from, to) / d : 0;
 }
 /* ⚠ FİLO ORTALAMASI SABİT BİR EŞİKLE KIYASLANAMAZ. Granit ağırlıklı
