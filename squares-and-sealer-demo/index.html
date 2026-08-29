@@ -5470,9 +5470,19 @@ function coverageOverall(from, to){
 function materialIn(from, to){
   return doneJobs(from, to).reduce((a, J) => a + materialCost(J), 0);
 }
+/* ⚠ PAYDA KAPLANAN METREKARE. Kışın çekilen çizgi ve kapatılan çukur
+   da metrekare taşıyor ama sealer harcamıyor; hepsini tek paydaya
+   koyunca fit² başına malzeme bandın altına düşüyordu. */
+function sealedJobs(from, to){
+  return doneJobs(from, to).filter(J => coats(J) > 0);
+}
+function sealedSqft(from, to){
+  return sealedJobs(from, to).reduce((a, J) => a + sqft(J), 0);
+}
 function matPerSqftOverall(from, to){
-  const s = sqftIn(from, to);
-  return s ? materialIn(from, to) / s : 0;
+  const s = sealedSqft(from, to);
+  return s ? sealedJobs(from, to)
+    .reduce((a, J) => a + materialCost(J), 0) / s : 0;
 }
 function revenueIn2(from, to){
   return jobsRange(from, to).reduce((a, J) => a + jobValue2(J), 0);
@@ -5481,7 +5491,9 @@ function sealRevenue(from, to){
   return doneJobs(from, to).reduce((a, J) => a + n0(J.price), 0);
 }
 function pricePerSqftOverall(from, to, kind){
-  const l = doneJobs(from, to).filter(J => !kind ||
+  /* ⚠ FİYAT BANDI KAPLAMA İŞİNİN BANDI. Yama ve çizgi işini aynı
+     ortalamaya katmak fit² fiyatını iki katına çıkarıyordu. */
+  const l = sealedJobs(from, to).filter(J => !kind ||
     (kind === "res" ? J.lotKind === "Driveway"
       : J.lotKind !== "Driveway"));
   const s = l.reduce((a, J) => a + sqft(J), 0);
@@ -5714,8 +5726,8 @@ function DEMO(){
      tutmuyor ama kapalı otoparkta çizgi çekiliyor, ılık günde çatlak
      dolduruluyor, soğuk yamayla çukur kapanıyor. Kışı tamamen boş
      bırakınca grafikte beş boş ay kalıyor ve demo ölü görünüyor. */
-  const seas = mo => [.07, .08, .16, .38, .82, 1.00, .96, .98, .92,
-    .58, .11, .06][mo];
+  const seas = mo => [.05, .06, .11, .32, .94, 1.00, .98, 1.00, .95,
+    .42, .08, .05][mo];
   const winter = mo => mo >= 10 || mo <= 2;
   const push = o => { jobs.push(Object.assign({id:id(),
     ref:"J-" + (ref++), crack:0, stripe:0, extras:0, discount:0,
@@ -5743,7 +5755,7 @@ function DEMO(){
          olarak yürütülüyor. */
       const raw = (small ? R.bt(2.4, 5.4) : R.bt(1.0, 2.6)) * s;
       const n = raw >= 1 ? Math.round(raw)
-        : (R.chance(Math.min(.85, raw * 1.7)) ? 1 : 0);
+        : (R.chance(Math.min(.85, raw * 0.95)) ? 1 : 0);
       for (let k = 0; k < n; k++){
         const commJob = !small && R.chance(.46);
         const pool = clients.filter(c =>
