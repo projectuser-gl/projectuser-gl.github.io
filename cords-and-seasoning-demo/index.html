@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-skin="highway" data-shell="light" data-surface="soft" data-density="regular">
+<html lang="en" data-skin="highway" data-shell="rail" data-surface="card" data-density="compact">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1209,7 +1209,7 @@ function blankShape(){
 }
 function dataLists(){
   return [V.job.key].concat(Object.keys(V.entities))
-    .concat(["invoices"]).concat(V.extraLists || [])
+    .concat(V.noMoney ? [] : ["invoices"]).concat(V.extraLists || [])
     .filter((k, i, a) => a.indexOf(k) === i);
 }
 
@@ -1529,7 +1529,12 @@ function commit(msg){
   if (cur !== _lastSet){ _lastSet = cur; S.set._t = Date.now(); }
   saveLocal();
   clearTimeout(_pushTimer);
-  _pushTimer = setTimeout(pushFile, 900);      // klasöre yazmayı topla
+  _pushTimer = setTimeout(function(){
+    pushFile();
+    /* ⚠ AYNI GECIKME. Bulut rate-limit'li; her tusa basista yuklemek
+       429 getiriyor. Klasor yazmasiyla ayni 900 ms'de toplaniyor. */
+    if (typeof dbxPush === "function" && typeof DBX !== "undefined" && DBX) dbxPush();
+  }, 900);
   if (msg) toast(msg);
 }
 function stamp(r){ r._t = Date.now(); return r; }
@@ -1660,16 +1665,27 @@ function areaChart(labels, series, opts){
   const h = opts.height || 190, W = 720, P = {t:12, r:12, b:26, l:opts.left || 52};
   if (!labels || !labels.length) return noData(W, h);
   const all = series.reduce((a, s) => a.concat(s.data), []);
-  const mx = niceMax(Math.max.apply(null, all.concat([0])) * 1.08) || 10;
-  if (!opts.left) P.l = axisLeft(Array.from({length:5}, (_, i) => mx - (mx/4) * i), opts.fmt, P.l);
+  /* ⚠ SIFIRDAN BASLAMAK HER SERIYE UYMUYOR. Tansiyon 80-160, pH 6-8,
+     sicaklik 18-24 bandinda; sifirdan cizince cizgi dumduz gorunuyor.
+     opts.min:"auto" tabani verinin biraz altina cekiyor. */
+  const pos = all.filter(v => v > 0);
+  let mn = 0;
+  if (opts.min === "auto" && pos.length){
+    const lo = Math.min.apply(null, pos), hi = Math.max.apply(null, pos);
+    if (lo > 0 && (hi - lo) < lo * 0.9) mn = Math.max(0, Math.floor((lo - (hi - lo) * 0.4) / 5) * 5);
+  } else if (typeof opts.min === "number") mn = opts.min;
+  const mx = mn ? Math.ceil((Math.max.apply(null, all.concat([mn])) * 1.04) / 5) * 5
+                : (niceMax(Math.max.apply(null, all.concat([0])) * 1.08) || 10);
+  const span = Math.max(1, mx - mn);
+  if (!opts.left) P.l = axisLeft(Array.from({length:5}, (_, i) => mx - (span/4) * i), opts.fmt, P.l);
   const iw = W - P.l - P.r, ih = h - P.t - P.b;
   const X = i => P.l + (labels.length === 1 ? iw/2 : (i/(labels.length-1)) * iw);
-  const Y = v => P.t + ih - (Math.max(0, v) / mx) * ih;
+  const Y = v => P.t + ih - Math.max(0, Math.min(1, (v - mn) / span)) * ih;
   const s = sv("svg", {viewBox:"0 0 "+W+" "+h, width:"100%", height:h,
                        preserveAspectRatio:"none", style:"display:block;overflow:visible"});
   /* ızgara + y ekseni */
   for (let i = 0; i <= 4; i++){
-    const y = P.t + (ih/4) * i, v = mx - (mx/4) * i;
+    const y = P.t + (ih/4) * i, v = mx - (span/4) * i;
     s.appendChild(sv("line", {x1:P.l, y1:y, x2:W-P.r, y2:y,
       stroke:"var(--hair2)", "stroke-width":1}));
     const t = sv("text", {x:P.l-8, y:y+3.5, "text-anchor":"end", fill:"var(--muted)",
@@ -3232,6 +3248,183 @@ function alerts(){
   return out.sort((a, b) => (order[a.kind] - order[b.kind])).slice(0, 40);
 }
 
+/* ── 29_logdash.js ── */
+/* ═══ KAYIT KİPİ PANOSU (ÇEKİRDEK) ══════════════════════════════════════
+   ⚠ NEDEN AYRI. Mevcut kompozisyonlar `costMix` · `marginGauge` ·
+     `rankClients` gibi PARA panellerini sabit çağırıyor. Tarantula bakım
+     kaydında bunlar boş kutu olarak duruyor ve ürünü ucuz gösteriyor.
+   ⚠ ÜRÜN BAŞINA İŞ YOK. Paneller `V.metric` ve `V.subject` bildiriminden
+     kendini kuruyor; 161 kayıt ürünü için tek tek panel yazılmıyor.
+
+     V.metric  = {key, label, unit, low, high, fmt}   ← izlenen asıl sayı
+     V.metric2 = ikinci seri (opsiyonel, örn. diyastolik)
+     V.subject = {entity, key, label}                 ← neyin kaydı
+     V.streak  = {label, everyDays}                   ← seri/aralık kuralı  */
+
+/* ⚠ İZLENEN SAYI HER ZAMAN BİR ALAN DEĞİL. Crohn'da asıl sayı beş
+   alandan HESAPLANAN Harvey-Bradshaw indeksi; kayıtta öyle bir alan yok.
+   `V.metric.calc` verilirse panel onu kullanıyor. */
+function metricVal(m, j){ return m && m.calc ? n0(m.calc(j)) : n0(j[(m || {}).key]); }
+function mVal(j){ return metricVal(V.metric, j); }
+function mFmt(v){ const m = V.metric || {};
+  return m.fmt ? m.fmt(v) : (num2 ? num2(v) : Math.round(v * 10) / 10) +
+    (m.unit ? " " + m.unit : ""); }
+function logRows(st){ return jobsIn(st.from, today()); }
+
+/* ── izlenen sayının zaman eğrisi (para değil) ─────────────────────── */
+function logTrend(st, h){
+  const m = V.metric || {}; const ht = h || 230;
+  const lab = st.months.map(monthLabel);
+  const avgBy = (mm) => st.months.map(mk => {
+    const g = rows(V.job.key).filter(j => isRevenue(j) && monthKey(jobDate(j)) === mk);
+    if (!g.length) return 0;
+    return g.reduce((a, j) => a + metricVal(mm, j), 0) / g.length;
+  });
+  const s1 = avgBy(m);
+  const series = [{data:s1, color:"var(--c1)"}];
+  if (V.metric2) series.push({data:avgBy(V.metric2), color:"var(--c5)"});
+  const dot = c => el("i", {style:{width:"9px", height:"9px", borderRadius:"2px", background:c}});
+  const legend = el("div", {class:"sm", style:{display:"flex", gap:"12px"}},
+    [[m.label, "var(--c1)"]].concat(V.metric2 ? [[V.metric2.label, "var(--c5)"]] : [])
+      .map(p => el("span", {style:{display:"flex", alignItems:"center", gap:"5px"}},
+        [dot(p[1]), el("span", {class:"mut", text:p[0]})])));
+  return el("div", {class:"panel chart grow"}, [
+    el("div", {class:"panel-head"}, [el("h2", {text:m.label + " by Month"}),
+      el("div", {class:"sp"}), legend]),
+    el("div", {class:"panel-body"},
+      areaChart(lab, series, {height:ht, fmt:mFmt, min:"auto"}))
+  ]);
+}
+
+/* ── hedef bandı içinde kalma oranı ────────────────────────────────── */
+function inRangePct(list){
+  const m = V.metric || {};
+  if (m.low === undefined && m.high === undefined) return null;
+  const ok = list.filter(j => {
+    const v = mVal(j);
+    if (m.low !== undefined && v < m.low) return false;
+    if (m.high !== undefined && v > m.high) return false;
+    return true;
+  }).length;
+  return list.length ? 100 * ok / list.length : 0;
+}
+function logRangeGauge(st){
+  const m = V.metric || {};
+  const list = logRows(st);
+  const pct = inRangePct(list);
+  if (pct === null) return null;
+  const hedef = m.targetPct === undefined ? 80 : m.targetPct;
+  return el("div", {class:"panel chart grow"}, [
+    el("div", {class:"panel-head"}, [el("h2", {text:"In Target Range"}),
+      el("div", {class:"sp"}),
+      el("div", {class:"hint", text:"target " + hedef + "% · band " +
+        (m.low !== undefined ? mFmt(m.low) : "") +
+        (m.low !== undefined && m.high !== undefined ? " – " : "") +
+        (m.high !== undefined ? mFmt(m.high) : "")})]),
+    el("div", {class:"panel-body"},
+      gauge(pct, {label:"in range", size:170,
+        color:pct >= hedef ? "var(--good)" : pct >= hedef * 0.75 ? "var(--warn)" : "var(--bad)"}))
+  ]);
+}
+
+/* ── neyin kaydı: özneye göre sıralama (araç, hayvan, bitki…) ─────── */
+function logRankSubject(st){
+  const s = V.subject; if (!s) return null;
+  const list = logRows(st);
+  const m = new Map();
+  list.forEach(j => {
+    const id = j[s.key]; if (!id) return;
+    const r = m.get(id) || {n:0, sum:0};
+    r.n++; r.sum += mVal(j); m.set(id, r);
+  });
+  const d = Array.from(m.entries()).map(([id, r]) => ({
+    k:nameOf(s.entity, id) || "—", v:r.n, avg:r.sum / r.n}))
+    .sort((a, b) => b.v - a.v).slice(0, 8);
+  if (!d.length) return null;
+  return el("div", {class:"panel chart grow"}, [
+    el("div", {class:"panel-head"}, [el("h2", {text:"Entries by " + (s.label || "Subject")}),
+      el("div", {class:"sp"}), el("div", {class:"hint", text:"count · average"})]),
+    el("div", {class:"panel-body"},
+      hbars(d.map(x => ({k:x.k, v:x.v})), {fmt:num}))
+  ]);
+}
+
+/* ── kayıt sıklığı: hangi gün, ne kadar boşluk ────────────────────── */
+function logCadence(st){
+  const list = logRows(st).slice().sort((a, b) =>
+    jobDate(a) < jobDate(b) ? -1 : 1);
+  if (list.length < 2) return null;
+  const gaps = [];
+  for (let i = 1; i < list.length; i++)
+    gaps.push(daysBetween(jobDate(list[i - 1]), jobDate(list[i])));
+  const buckets = [0, 0, 0, 0, 0];
+  gaps.forEach(g => buckets[g <= 1 ? 0 : g <= 3 ? 1 : g <= 7 ? 2 : g <= 14 ? 3 : 4]++);
+  return el("div", {class:"panel chart grow"}, [
+    el("div", {class:"panel-head"}, [el("h2", {text:"How Often You Log"}),
+      el("div", {class:"sp"}), el("div", {class:"hint", text:"gap between entries"})]),
+    el("div", {class:"panel-body"},
+      barChart(["same/next day", "2–3 days", "4–7 days", "1–2 weeks", "longer"],
+        buckets, {height:200, color:"var(--c4)", fmt:num}))
+  ]);
+}
+
+/* ── kompozisyonlar: para panelleri yerine kayıt panelleri ────────── */
+const LOGDASH = {
+  logkpi:(st, c) => [
+    kpiRow(c.slice(0, 4), 4),
+    logTrend(st, 280),
+    el("div", {class:"grid g23"}, [logRangeGauge(st), statusPart(st)].filter(Boolean)),
+    el("div", {class:"grid g2"}, [logRankSubject(st), logCadence(st)].filter(Boolean)),
+    kpiRow(c.slice(4), 4),
+    attention(),
+    recentTable(6)
+  ],
+  logfocus:(st, c) => [
+    kpiRow(c.slice(0, 4), 4),
+    logTrend(st, 280),
+    el("div", {class:"grid g23"}, [logRangeGauge(st), statusPart(st, null, 168)].filter(Boolean)),
+    kpiRow(c.slice(4), 4),
+    el("div", {class:"grid g2"}, [logRankSubject(st), logCadence(st)].filter(Boolean)),
+    attention(),
+    recentTable(8)
+  ],
+  logreport:(st, c) => [
+    kpiRow(c.slice(0, 4), 4),
+    el("div", {class:"grid g23"}, [logTrend(st, 260), logRangeGauge(st)].filter(Boolean)),
+    el("div", {class:"grid g2"}, [logRankSubject(st), statusPart(st, "bars")].filter(Boolean)),
+    kpiRow(c.slice(4), 4),
+    trendGrid(st),
+    el("div", {class:"grid g23"}, [logCadence(st), attention()].filter(Boolean)),
+    recentTable(10)
+  ],
+  logsplit:(st, c) => [
+    kpiRow(c.slice(0, 4), 4),
+    el("div", {class:"grid g23"}, [logTrend(st, 250), logRangeGauge(st)].filter(Boolean)),
+    el("div", {class:"grid g2"}, [logRankSubject(st), statusPart(st, "bars")].filter(Boolean)),
+    kpiRow(c.slice(4), 4),
+    trendGrid(st),
+    el("div", {class:"grid g23"}, [logCadence(st), attention()].filter(Boolean)),
+    recentTable(6)
+  ],
+  loghero:(st, c) => [
+    logTrend(st, 300),
+    kpiRow(c.slice(0, 4), 4),
+    el("div", {class:"grid g23"}, [logRangeGauge(st), logRankSubject(st)].filter(Boolean)),
+    kpiRow(c.slice(4), 4),
+    el("div", {class:"grid g23"}, [statusPart(st), logCadence(st)].filter(Boolean)),
+    recentTable(6)
+  ],
+  logboard:(st, c) => [
+    kpiRow(c.slice(0, 4), 4),
+    logTrend(st, 270),
+    el("div", {class:"grid g23"}, [logRangeGauge(st), logRankSubject(st)].filter(Boolean)),
+    boardPreview(true),
+    kpiRow(c.slice(4), 4),
+    el("div", {class:"grid g2"}, [logCadence(st), statusPart(st, "bars")].filter(Boolean)),
+    recentTable(6)
+  ]
+};
+
 /* ── 30_dashboard.js ── */
 /* ═══ ANA SAYFA — KOMPOZİSYONLAR ════════════════════════════════════════
    ⚠ DERİ DEĞİŞTİRMEK YETMİYOR. Renk/font/çerçeve farklı olsa da her ürün
@@ -3456,11 +3649,19 @@ function statusPart(st, kind, size){
     body, false, "chart fixed grow");
 }
 function attention(){
-  const AL = alerts();
+  /* ⚠ İYİ HABER DE BİR UYARI KALEMİDİR. Kayıt ürünlerinde eşiğe
+     ULAŞMAK (nöbetsiz 365 gün, seri, remisyon) en önemli satır; ama
+     `good` kalemi sarı boyanınca kötü haber gibi duruyordu. Kırmızı
+     önce, sarı sonra, yeşil en altta. */
+  const AL = alerts().slice().sort((a, b) => {
+    const w = k => k === "bad" ? 0 : k === "good" ? 2 : 1;
+    return w(a.kind) - w(b.kind);
+  });
   return el("div", {class:"panel"}, [
     el("div", {class:"panel-head"}, [
       el("h2", {text:"Needs Attention"}), el("div", {class:"sp"}),
-      AL.length ? el("span", {class:"pill " + (AL.some(a => a.kind === "bad") ? "bad" : "warn"),
+      AL.length ? el("span", {class:"pill " + (AL.some(a => a.kind === "bad") ? "bad"
+        : AL.every(a => a.kind === "good") ? "good" : "warn"),
         text:AL.length + " item" + (AL.length > 1 ? "s" : "")}) : null
     ]),
     el("div", {class:"panel-body flush", style:{maxHeight:"330px", overflowY:"auto"}},
@@ -3469,7 +3670,8 @@ function attention(){
           padding:"10px 14px", borderBottom:"1px solid var(--hair2)", borderLeft:"0",
           background:"none"}, onclick:() => go(a.go)}, [
           el("span", {class:"ic", html:a.icon,
-            style:{color:"var(--" + (a.kind === "bad" ? "bad" : "warn") + ")"}}),
+            style:{color:"var(--" + (a.kind === "bad" ? "bad"
+              : a.kind === "good" ? "good" : "warn") + ")"}}),
           el("span", {class:"cell-2", style:{flex:"1"}}, [
             el("span", {class:"a", style:{fontSize:"12.5px"}, text:a.text}),
             el("span", {class:"b", text:a.note})])
@@ -3577,7 +3779,12 @@ function boardPreview(compact){
       style:{cursor:"pointer"}, onclick:() => editJob(j)}, [
       el("div", {class:"r1"}, [
         el("span", {class:"ref", text:jobRef(j) || "—"}),
-        el("span", {class:"amt", text:money0(jobValue(j))})]),
+        /* ⚠ KAYIT KİPİNDE PARA YOK. Ağrı skoru "$4" diye basılıyordu;
+           tahtada izlenen sayı para değil, V.metric'in kendisi. */
+        el("span", {class:"amt", text:V.noMoney
+          ? (typeof mFmt === "function" ? mFmt(typeof mVal === "function" ? mVal(j) : jobValue(j))
+                                        : String(jobValue(j)))
+          : money0(jobValue(j))})]),
       el("div", {class:"r2", text:jobLabel(j)}),
       el("div", {class:"r3"}, [el("span", {text:dateShort(jobStart(j))}),
         el("span", {text:"·"}), el("span", {text:jobCardSub(j)})])
@@ -3844,9 +4051,21 @@ function viewDashboard(){
   /* ⚠ Bilinmeyen kompozisyon SESSİZCE `kpi`ye düşmez — o, tüm ürünleri
      aynı panoya geri döndüren şeyin ta kendisi. Konsola yazıp öyle düşüyor. */
   const key = (V.design && V.design.dash) || "kpi";
-  const build = DASH[key];
+  /* ⚠ KAYIT KİPİNDE PARA PANELLERİ YOK. noMoney ürünlerde kompozisyon
+     LOGDASH'ten geliyor (29_logdash.js); `focus` → `logfocus` gibi. */
+  const build = (V.noMoney && typeof LOGDASH !== "undefined" &&
+                 LOGDASH["log" + key]) || DASH[key];
   if (!build) console.error("bilinmeyen pano kompozisyonu: " + key);
-  (build || DASH.kpi)(st, cards).filter(Boolean).forEach(n => view.appendChild(n));
+  const nodes = (build || DASH.kpi)(st, cards).filter(Boolean);
+  /* ⚠ ÜRÜNE ÖZGÜ PANEL. Her kayıt ürününün bir ayırt edici hesabı var
+     (döngü gününe hizalanmış ağrı, gecikmeli tetikleyici, enerji zarfı).
+     Jenerik paneller onu gösteremiyor ve ürün komşusunun kopyası gibi
+     duruyor. `V.dashPanel(st)` varsa ilk grafikten hemen sonra giriyor. */
+  if (V.dashPanel){
+    const extra = V.dashPanel(st);
+    if (extra) nodes.splice(Math.min(2, nodes.length), 0, extra);
+  }
+  nodes.forEach(n => view.appendChild(n));
   return view;
 }
 
@@ -4563,7 +4782,11 @@ const ALL_REPORTS = {
   client:() => ({t:W("clients"), fn:repCustomers})
 };
 function reportList(){
-  return (V.reports || ["pnl","jobs","client"]).map(k => {
+  /* ⚠ DIKEY KENDI RAPORUNU EKLEYEBILIR. Kayit urunlerinde K/Z anlamsiz;
+     V.reports icinde {v,t,fn} nesnesi verilirse dogrudan kullanilir. */
+  const d = V.reports || (V.noMoney ? ["jobs"] : ["pnl","jobs","client"]);
+  return d.map(k => {
+    if (k && typeof k === "object") return k;
     const r = ALL_REPORTS[k]; return r ? Object.assign({v:k}, r()) : null;
   }).filter(Boolean);
 }
@@ -4921,6 +5144,70 @@ function viewSync(){
     el("div", {class:"sm mut", id:"storageLine", style:{flexBasis:"100%"}, text:""})
   ])));
 
+  /* ── 0. BULUT — telefonda TEK yol, o yüzden en üstte ────────────────
+     ⚠ FS API telefonda YOK. Klasör anlatısını telefonda göstermek
+       kullanıcıyı yapamayacağı bir adıma yolluyor. Bulut varsa ve
+       klasör yoksa bu panel ilk sırada duruyor.
+     ⚠ SAFARI 7 GÜNDE SİLİYOR. Etkileşim olmayan sitenin localStorage ve
+       IndexedDB'si ITP tarafından atılıyor; telefonu tek kopya saymak
+       veri kaybı demek. Uyarı burada, "isteğe bağlı" diye sunulmuyor. */
+  if (CLOUD_OK()){
+    const on = !!DBX;
+    const bodyC = el("div", {class:"panel-body flush"});
+    bodyC.appendChild(el("div", {style:{padding:"15px 16px",
+      borderBottom:"1px solid var(--hair2)"}}, [
+      el("p", {class:"sm", style:{margin:"0", lineHeight:"1.7",
+        color:"var(--ink2)", maxWidth:"72ch"}},
+        on ? "Every change is uploaded to a folder Dropbox made for this app. Open the same address on another phone or computer, connect the same Dropbox, and your work is there."
+           : "Connect your Dropbox once and this app keeps a copy of everything there. You are not making an account with me — you sign in to Dropbox, and the app can only see the folder Dropbox creates for it. Nothing else in your Dropbox is visible to it.")
+    ]));
+    bodyC.appendChild(stepCard(1, on ? "Dropbox connected" : "Connect Dropbox",
+      on ? "It stays connected. You will not be asked to sign in again unless you disconnect."
+         : "One tap. Dropbox asks you to allow it, and that is the whole setup.",
+      el("div", {class:"btn-row"}, [
+        el("button", {class:"btn " + (on ? "" : "pri"),
+          html:ICON.up + "<span>" + (on ? "Reconnect" : "Connect Dropbox") + "</span>",
+          onclick:dbxConnect}),
+        on ? el("button", {class:"btn", html:ICON.down + "<span>Check for changes</span>",
+          onclick:() => dbxPull().then(n => {
+            render();
+            toast(n ? n + " records merged." : "Already up to date.", n ? "ok" : "info");
+          })}) : null,
+        on ? el("button", {class:"btn ghost", text:"Disconnect",
+          onclick:dbxForget}) : null
+      ]), on));
+    if (on) bodyC.appendChild(stepCard(2, "Use it anywhere",
+      "Open this same web address on your other phone, tablet or computer and connect the same Dropbox. Each device writes only its own file, so two people can work at the same time without overwriting each other — the newer change wins.",
+      null, true));
+    if (DBX_FAIL) bodyC.appendChild(el("div", {style:{padding:"13px 16px",
+      display:"flex", gap:"11px", alignItems:"flex-start",
+      background:"var(--warn-soft)", borderTop:"1px solid var(--hair2)"}}, [
+      el("span", {html:ICON.alert, style:{color:"var(--warn)", flex:"0 0 auto"}}),
+      el("div", {class:"sm", style:{lineHeight:"1.65", color:"var(--ink2)"}}, [
+        el("b", {text:"Dropbox did not answer. "}),
+        el("span", {text:"Your work is still saved on this device. It will go up on its own once you are back online."})
+      ])
+    ]));
+    if (!on) bodyC.appendChild(el("div", {style:{padding:"13px 16px",
+      display:"flex", gap:"11px", alignItems:"flex-start",
+      background:"var(--warn-soft)", borderTop:"1px solid var(--hair2)"}}, [
+      el("span", {html:ICON.alert, style:{color:"var(--warn)", flex:"0 0 auto"}}),
+      el("div", {class:"sm", style:{lineHeight:"1.65", color:"var(--ink2)"}}, [
+        el("b", {text:"On a phone, this is not optional. "}),
+        el("span", {text:"Safari and Chrome delete a website's stored data after a week or two without a visit. Until you connect Dropbox, this device is the only copy of your work and it is not a safe one."})
+      ])
+    ]));
+    out.appendChild(el("div", {class:"panel"}, [
+      el("div", {class:"panel-head"}, [
+        el("h2", {text:"Dropbox"}),
+        el("div", {class:"sp"}),
+        el("span", {class:"pill " + (on ? "ok" : "warn") + " plain",
+          text:on ? "Connected" : "Not connected"})
+      ]),
+      bodyC
+    ]));
+  }
+
   /* ── 1. OTOMATİK KAYDETME — ASIL İŞ ── */
   const body1 = el("div", {class:"panel-body flush"});
   body1.appendChild(el("div", {style:{padding:"15px 16px",
@@ -5087,6 +5374,329 @@ function viewSync(){
   return out;
 }
 
+/* ── 38_cloud.js ── */
+/* ═══ BULUT TAŞIYICI (Dropbox) ══════════════════════════════════════════
+   ⚠ NEDEN DROPBOX, DRIVE DEĞİL. Google'ın saf-tarayıcı akışı refresh
+     token VERMİYOR; yenileme gizli iframe'in Google oturum çerezine
+     erişmesine bağlı ve iOS Safari'nin ITP'si o çerezi kesiyor — yani
+     telefonda saat başı görünür bir "devam et". Dropbox PKCE public
+     client'a `token_access_type=offline` ile GERÇEK refresh token
+     veriyor, secret istemiyor ve yenilemesi tarayıcıdan çalışıyor.
+   ⚠ MASAÜSTÜ YOLUNU DEĞİŞTİRMİYOR. Klasör senkronu (File System Access)
+     daha iyi: offline, token yok, rate-limit yok. Bu katman YALNIZCA
+     FS API'nin olmadığı yerde (telefon) devreye giriyor.
+   ⚠ AYNI DESEN: cihaz başına dosya. Her cihaz yalnız kendi
+     `<app>-<cihaz>.json` dosyasına yazar, okumada ötekiler birleşir.
+     Böylece çakışacak yazma yok — klasör yolunun aynısı, taşıyıcı farklı.
+   ⚠ APP KEY GELİŞTİRİCİNİN, MÜŞTERİNİN DEĞİL. Tek anahtar, uygulamaya
+     gömülü, public (PKCE olduğu için secret yok). Müşteri tarafında tek
+     dokunuş "Connect Dropbox" — hiçbir kurulum yok.
+   ⚠ ANAHTAR DOSYAYA YAZILMAZ. build.py --web=<key> derleme anında
+     gömüyor; kaynakta boş duruyor.                                      */
+
+const DBX_KEY = "";                  /* build.py --web=<key> doldurur */
+const DBX_ROOT = "https://api.dropboxapi.com";
+const DBX_CONTENT = "https://content.dropboxapi.com";
+const CLOUD_OK = () => !!DBX_KEY && !DEMO_MODE;
+
+let DBX = null;          /* {refresh, access, exp} */
+let DBX_LAST = 0, DBX_FAIL = "", DBX_BUSY = false;
+
+/* ── PKCE ──────────────────────────────────────────────────────────── */
+function b64url(buf){
+  let s = "";
+  new Uint8Array(buf).forEach(b => s += String.fromCharCode(b));
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function pkceVerifier(){
+  const a = new Uint8Array(48);
+  crypto.getRandomValues(a);
+  return b64url(a.buffer);
+}
+async function pkceChallenge(v){
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v));
+  return b64url(d);
+}
+/* ⚠ REDIRECT URI TAM EŞLEŞMELİ. Dropbox konsoluna yazılanla birebir aynı
+   olmak zorunda; query string taşırsak eşleşme kırılıyor. */
+function dbxRedirect(){
+  return location.origin + location.pathname;
+}
+
+async function dbxConnect(){
+  if (!CLOUD_OK()) return;
+  const v = pkceVerifier();
+  try { sessionStorage.setItem(APP() + ":pkce", v); }
+  catch(e){ toast("Your browser is blocking storage — sign-in can't continue.", "err"); return; }
+  const u = new URL("https://www.dropbox.com/oauth2/authorize");
+  u.searchParams.set("client_id", DBX_KEY);
+  u.searchParams.set("response_type", "code");
+  u.searchParams.set("code_challenge", await pkceChallenge(v));
+  u.searchParams.set("code_challenge_method", "S256");
+  u.searchParams.set("redirect_uri", dbxRedirect());
+  u.searchParams.set("token_access_type", "offline");   /* → refresh token */
+  location.href = u.toString();
+}
+
+async function dbxForm(body){
+  const r = await fetch(DBX_ROOT + "/oauth2/token", {
+    method:"POST",
+    headers:{"Content-Type":"application/x-www-form-urlencoded"},
+    body:new URLSearchParams(body).toString()
+  });
+  if (!r.ok) throw new Error("dropbox auth " + r.status + " " + (await r.text()).slice(0, 160));
+  return r.json();
+}
+
+/* Dönüşte ?code= ile geliyoruz. Adres çubuğunu hemen temizliyoruz ki
+   yenilemede aynı kod ikinci kez harcanmasın (Dropbox tek kullanımlık). */
+async function dbxFinishRedirect(){
+  if (!CLOUD_OK()) return false;
+  const q = new URLSearchParams(location.search);
+  const code = q.get("code");
+  if (!code) return false;
+  const v = sessionStorage.getItem(APP() + ":pkce") || "";
+  history.replaceState({}, "", dbxRedirect());
+  if (!v){ toast("Sign-in could not be completed — please try again.", "err"); return false; }
+  try {
+    const t = await dbxForm({code:code, grant_type:"authorization_code",
+      code_verifier:v, client_id:DBX_KEY, redirect_uri:dbxRedirect()});
+    sessionStorage.removeItem(APP() + ":pkce");
+    DBX = {refresh:t.refresh_token || "", access:t.access_token,
+           exp:Date.now() + (n0(t.expires_in) || 14000) * 1000};
+    await idbPut("dbx", DBX);
+    return true;
+  } catch(e){
+    DBX_FAIL = String(e.message || e);
+    toast("Dropbox sign-in failed.", "err");
+    return false;
+  }
+}
+
+async function dbxResume(){
+  if (!CLOUD_OK()) return;
+  try { DBX = (await idbGet("dbx")) || null; } catch(e){ DBX = null; }
+}
+
+/* ⚠ TOKEN 4 SAAT. Refresh token ile yenileme GÖRÜNMEZ — kullanıcı hiçbir
+   şey görmüyor. 60 sn pay bırakılıyor ki uçuşta sona ermesin. */
+async function dbxToken(){
+  if (!DBX) return "";
+  if (DBX.access && Date.now() < DBX.exp - 60000) return DBX.access;
+  if (!DBX.refresh) return "";
+  const t = await dbxForm({grant_type:"refresh_token",
+    refresh_token:DBX.refresh, client_id:DBX_KEY});
+  DBX.access = t.access_token;
+  DBX.exp = Date.now() + (n0(t.expires_in) || 14000) * 1000;
+  await idbPut("dbx", DBX);
+  return DBX.access;
+}
+
+async function dbxCall(url, headers, body){
+  const tk = await dbxToken();
+  if (!tk) throw new Error("not connected");
+  const r = await fetch(url, {method:"POST",
+    headers:Object.assign({Authorization:"Bearer " + tk}, headers),
+    body:body});
+  if (!r.ok) throw new Error(r.status + " " + (await r.text()).slice(0, 200));
+  return r;
+}
+
+/* ── Aynı iki işlem: kendi dosyanı yaz, ötekileri oku ──────────────── */
+async function dbxPush(){
+  if (!DBX || DEMO_MODE || DBX_BUSY) return;
+  const name = APP() + "-" + deviceName() + ".json";
+  try {
+    await dbxCall(DBX_CONTENT + "/2/files/upload",
+      {"Dropbox-API-Arg":JSON.stringify({path:"/" + name,
+        mode:"overwrite", mute:true}),
+       "Content-Type":"application/octet-stream"},
+      JSON.stringify(S, null, 1));
+    DBX_LAST = Date.now(); DBX_FAIL = "";
+    S.set.lastFolderWrite = today();
+  } catch(e){ DBX_FAIL = String(e.message || e); }
+  paintSync();
+}
+
+async function dbxPull(){
+  if (!DBX || DEMO_MODE || DBX_BUSY) return 0;
+  const mine = APP() + "-" + deviceName() + ".json";
+  let n = 0;
+  DBX_BUSY = true;
+  try {
+    const r = await dbxCall(DBX_ROOT + "/2/files/list_folder",
+      {"Content-Type":"application/json"}, JSON.stringify({path:""}));
+    const j = await r.json();
+    for (const e of (j.entries || [])){
+      if (e[".tag"] !== "file" || e.name === mine || !fileMine(e.name)) continue;
+      try {
+        const f = await dbxCall(DBX_CONTENT + "/2/files/download",
+          {"Dropbox-API-Arg":JSON.stringify({path:e.path_lower})}, null);
+        n += mergeIncoming(JSON.parse(await f.text()));
+      } catch(err){}
+    }
+    saveLocal();
+    DBX_FAIL = "";
+  } catch(e){ DBX_FAIL = String(e.message || e); }
+  DBX_BUSY = false;
+  paintSync();
+  return n;
+}
+
+async function dbxForget(){
+  DBX = null;
+  try { await idbPut("dbx", null); } catch(e){}
+  paintSync();
+  toast("Dropbox disconnected. Your data is still on this device.", "info");
+}
+
+/* ⚠ TELEFON SEKME DONDURUYOR. iOS arka plandaki sekmeyi askıya alıyor;
+   zamanlayıcıya güvenilmiyor. Sayfa geri görünür olunca çekiliyor. */
+function cloudWatch(){
+  if (!DBX) return;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && Date.now() - DBX_LAST > 20000)
+      dbxPull().then(n => { if (n) render(); });
+  });
+}
+
+/* ── 39_install.js ── */
+/* ═══ ANA EKRANA EKLEME ═════════════════════════════════════════════════
+   ⚠ İKİ AYRI DERDİ BİRDEN ÇÖZÜYOR:
+     1) "Her seferinde linke girmek" — ana ekranda simge oluyor, adres
+        çubuğu yok, uygulama gibi açılıyor.
+     2) SAFARI'NİN 7 GÜNLÜK SİLMESİ — WebKit'in kendi açıklaması: ana
+        ekrana eklenen web uygulaması Safari'nin parçası SAYILMIYOR, kendi
+        kullanım sayacı var ve verisi silinmiyor. Yani telefonda veriyi
+        ayakta tutan şey bu; "isteğe bağlı güzellik" değil.
+   ⚠ APPLE-TOUCH-ICON PNG OLMAK ZORUNDA. iOS SVG kabul etmiyor; sekme
+     ikonundaki SVG'yi buraya koyunca simge boş çıkıyor. Canvas'ta
+     çiziliyor — SVG'yi canvas'a basmak bazı tarayıcılarda tuvali
+     kirletiyor, o yüzden 2D ilkellerle.
+   ⚠ SADECE BARINDIRILAN SÜRÜMDE. file:// ile açılan masaüstü kopyasında
+     ana ekran diye bir şey yok; orada bu şerit gürültü olurdu.          */
+
+const HOSTED = location.protocol === "http:" || location.protocol === "https:";
+const STANDALONE = (window.matchMedia &&
+    window.matchMedia("(display-mode: standalone)").matches) ||
+  navigator.standalone === true;
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const SMALL = window.matchMedia && window.matchMedia("(max-width: 900px)").matches;
+
+function accentHex(){
+  try {
+    const c = getComputedStyle(document.documentElement)
+      .getPropertyValue("--accent").trim();
+    return c || "#E8590C";
+  } catch(e){ return "#E8590C"; }
+}
+function brandInitials(){
+  const n = (S.set.company || V.name || "App").replace(/[^A-Za-z0-9 ]/g, " ").trim();
+  const w = n.split(/\s+/).filter(Boolean);
+  return ((w[0] || "A")[0] + (w[1] ? w[1][0] : (w[0] || "A")[1] || "")).toUpperCase();
+}
+function touchIconPNG(size){
+  try {
+    const c = document.createElement("canvas");
+    c.width = c.height = size;
+    const x = c.getContext("2d");
+    const r = size * 0.22;
+    x.fillStyle = "#161C24";
+    x.beginPath();
+    if (x.roundRect) x.roundRect(0, 0, size, size, r); else x.rect(0, 0, size, size);
+    x.fill();
+    x.fillStyle = accentHex();
+    x.beginPath();
+    const p = size * 0.16, s2 = size - p * 2, r2 = s2 * 0.2;
+    if (x.roundRect) x.roundRect(p, p, s2, s2, r2); else x.rect(p, p, s2, s2);
+    x.fill();
+    x.fillStyle = "#FFFFFF";
+    x.font = "600 " + Math.round(size * 0.38) + "px -apple-system,Helvetica,Arial,sans-serif";
+    x.textAlign = "center"; x.textBaseline = "middle";
+    x.fillText(brandInitials(), size / 2, size / 2 + size * 0.02);
+    return c.toDataURL("image/png");
+  } catch(e){ return ""; }
+}
+
+function setMeta(name, content){
+  let m = document.querySelector('meta[name="' + name + '"]');
+  if (!m){ m = document.createElement("meta"); m.name = name; document.head.appendChild(m); }
+  m.content = content;
+}
+function setLink(rel, href, extra){
+  let l = document.querySelector('link[rel="' + rel + '"][data-inst]');
+  if (!l){ l = document.createElement("link"); l.rel = rel;
+    l.setAttribute("data-inst", "1"); document.head.appendChild(l); }
+  l.href = href;
+  if (extra) for (const k in extra) l.setAttribute(k, extra[k]);
+}
+
+function installMeta(){
+  if (!HOSTED) return;
+  const name = (S.set.company || V.name);
+  setMeta("apple-mobile-web-app-capable", "yes");
+  setMeta("mobile-web-app-capable", "yes");
+  setMeta("apple-mobile-web-app-status-bar-style", "black-translucent");
+  setMeta("apple-mobile-web-app-title", name.slice(0, 24));
+  setMeta("theme-color", "#161C24");
+  const png = touchIconPNG(180);
+  if (png) setLink("apple-touch-icon", png, {sizes:"180x180"});
+  /* ⚠ MANIFEST DE GÖMÜLÜ. Ayrı dosya tek-dosya kuralını bozardı;
+     data URI olarak veriliyor, Chrome bunu kabul ediyor. */
+  const big = touchIconPNG(512);
+  const man = {name:name, short_name:name.slice(0, 12), start_url:location.pathname,
+    display:"standalone", background_color:"#161C24", theme_color:"#161C24",
+    icons:big ? [{src:big, sizes:"512x512", type:"image/png", purpose:"any"}] : []};
+  try {
+    setLink("manifest", "data:application/manifest+json;charset=utf-8," +
+      encodeURIComponent(JSON.stringify(man)));
+  } catch(e){}
+}
+
+/* ── Kurulum şeridi ─────────────────────────────────────────────────── */
+let _deferredPrompt = null;
+if (typeof window !== "undefined"){
+  window.addEventListener("beforeinstallprompt", e => {
+    e.preventDefault(); _deferredPrompt = e;
+    try { installBar(); } catch(err){}
+  });
+}
+const INST_KEY = () => APP() + ":inst-hid";
+
+function installBar(){
+  if (!HOSTED || STANDALONE || DEMO_MODE) return;
+  if (!SMALL && !_deferredPrompt) return;
+  try { if (localStorage.getItem(INST_KEY())) return; } catch(e){}
+  if (document.getElementById("instBar")) return;
+  const how = IOS
+    ? "Tap the Share button below, then Add to Home Screen."
+    : "Tap Install and it lives on your home screen like any app.";
+  const bar = el("div", {id:"instBar", style:{position:"fixed", left:"10px",
+    right:"10px", bottom:"10px", zIndex:"96", display:"flex", gap:"11px",
+    alignItems:"flex-start", padding:"12px 14px", borderRadius:"12px",
+    background:"var(--rail)", color:"var(--rail-active)",
+    border:"1px solid var(--rail-hair)", fontSize:"12.5px",
+    boxShadow:"0 6px 22px rgba(0,0,0,.28)"}}, [
+    el("div", {style:{flex:"1", minWidth:"0", lineHeight:"1.55"}}, [
+      el("b", {text:"Put this on your home screen. "}),
+      el("span", {style:{opacity:".85"}, text:how + " It opens like an app — " +
+        "no address to type — and your records stop being deleted after a week " +
+        "of not opening it."})
+    ]),
+    _deferredPrompt ? el("button", {class:"btn pri", style:{flex:"0 0 auto"},
+      text:"Install", onclick:async () => {
+        const p = _deferredPrompt; _deferredPrompt = null;
+        bar.remove();
+        try { p.prompt(); await p.userChoice; } catch(e){}
+      }}) : null,
+    el("button", {class:"btn ghost", style:{flex:"0 0 auto"}, text:"Not now",
+      onclick:() => { bar.remove();
+        try { localStorage.setItem(INST_KEY(), "1"); } catch(e){} }})
+  ]);
+  document.body.appendChild(bar);
+}
+
 /* ── 40_shell.js ── */
 /* ═══ KABUK + YÖNLENDİRME (ÇEKİRDEK) ════════════════════════════════════
    Sayfa listesi config'ten TÜRETİLİR, elle yazılmaz.
@@ -5108,8 +5718,12 @@ function buildPages(){
   if (V.job.board !== false)
     PAGES.board = {t:W("board"), s:"Drag " + W("jobsLower") + " through their stages",
                    i:"board", fn:viewBoard};
-  PAGES.invoices = {t:"Invoices", s:"Bill " + W("jobsLower") + " and track what's owed",
-                    i:"invoice", fn:viewInvoices};
+  /* ⚠ PARA KATMANI ARTIK OPSIYONEL. Tarantula bakim kaydinda "Invoices"
+     sekmesi bos durur ve urunu ucuz gosterir. V.noMoney ile kapatiliyor;
+     bayrak yoksa davranis eskisiyle birebir ayni. */
+  if (!V.noMoney)
+    PAGES.invoices = {t:"Invoices", s:"Bill " + W("jobsLower") + " and track what's owed",
+                      i:"invoice", fn:viewInvoices};
   Object.keys(V.entities).forEach(k => {
     const e = V.entities[k];
     PAGES[k] = {t:e.title || e.noun + "s", s:e.sub || "", i:e.icon || "doc",
@@ -5128,11 +5742,13 @@ function buildPages(){
     if (!PAGES[k]) throw new Error("nav'da '" + k + "' var ama sayfası yok");
   }));
 
-  COUNTS = {
-    invoices: () => rows("invoices").filter(i => !i.paidDate).length,
+  COUNTS = {};
+  if (!V.noMoney)
+    COUNTS.invoices = () => rows("invoices").filter(i => !i.paidDate).length;
+  Object.assign(COUNTS, {
     sync:     () => DIR ? 0 : (!S.set.lastBackup ||
                 daysBetween(S.set.lastBackup, today()) > 14) ? 1 : 0
-  };
+  });
   COUNTS[V.job.key] = () => rows(V.job.key).filter(isOpen).length;
   if (V.entities.docs) COUNTS.docs = () => rows("docs").filter(d => d.expires &&
     daysBetween(today(), d.expires) < 45).length;
@@ -5161,7 +5777,21 @@ function buildNav(){
 function paintSync(needsPermission){
   const chip = $("#syncChip"); if (!chip) return;
   const dot = $(".sync-dot", chip), txt = $(".sync-txt", chip);
-  if (!HAS_FS){
+  /* ⚠ TELEFONDA TEK GERCEK YOL BULUT. FS API yoksa durum cubugu bulutu
+     anlatmali; "Saved on this device" demek kullaniciyi yanlis guvene
+     sokuyordu — Safari etkilesim olmayan sitenin deposunu 7 gunde siliyor. */
+  if (CLOUD_OK() && DBX){
+    if (DBX_FAIL){
+      dot.className = "sync-dot off"; txt.textContent = "Sync problem";
+      chip.title = DBX_FAIL;
+    } else {
+      dot.className = "sync-dot ok"; txt.textContent = "Syncing to Dropbox";
+      chip.title = "Every change is uploaded to your Dropbox app folder";
+    }
+  } else if (CLOUD_OK() && !HAS_FS){
+    dot.className = "sync-dot off"; txt.textContent = "Not backed up";
+    chip.title = "Click to connect Dropbox — otherwise this phone is the only copy";
+  } else if (!HAS_FS){
     dot.className = "sync-dot"; txt.textContent = "Saved on this device";
     chip.title = browserName() + " can't save to a folder by itself — click to see what to do.";
   } else if (!DIR){
@@ -5244,6 +5874,24 @@ async function boot(){
     await firstRun();          /* sessizce demo yükleme — SOR */
   }
   await resumeFolder();
+  /* ⚠ SIRA: once kayitli oturum, sonra donusteki ?code=. Ters sirada
+     yeni token eskisini ezmeden diske yaziliyor ve baglanti kayboluyor. */
+  /* ⚠ ANA EKRAN ŞERİDİ BULUTTAN ÖNCE. Telefonda veriyi ayakta tutan asıl
+     şey ana ekrana eklemek; bulut onun yedeği. */
+  installMeta();
+  installBar();
+  if (CLOUD_OK()){
+    await dbxResume();
+    if (await dbxFinishRedirect()){
+      toast("Dropbox connected — your work syncs from now on.");
+    }
+    if (DBX){
+      cloudWatch();
+      const n = await dbxPull();
+      if (n) render();
+    }
+    paintSync();
+  }
 }
 
 /* ── 42_demolib.js ── */
@@ -5411,1074 +6059,743 @@ function ageDemoInvoices(d){
 }
 
 /* ── 20_domain.js ── */
-/* ═══ ALAN — ODUNCU ═════════════════════════════════════════════════════
-   Odun satan bir işletmenin sattığı şey odun değil, KURULUK. Yaş kütük
-   ucuz ve boldur; yanan odun ise bir yıl önce alınmış, yarılmış,
-   istiflenmiş ve BEKLETİLMİŞ olandır. Bu işin bütün sermayesi avluda
-   yatıyor.
+/* ═══ ALAN: ODUN KURUTMA VE SATIŞ ══════════════════════════════════════
+   ⚠ ÜRÜNÜN BİRİNCİ SAYISI: HER İSTİFİN %20'YE İNECEĞİ TARİH. Odun
+     satılabilir olmak için nem oranı %20'nin altına inmeli (İngiltere'de
+     yasal sınır da bu). Ama "bir yıl bekletirsin" cevabı yanlış: dişbudak
+     bir yazda iner, meşe iki yaz ister, üstü kapalı ve tek sıra istif
+     üç katı hızlı kurur. Ürün her istifin KENDİ ölçümlerine üstel bir
+     kuruma eğrisi oturtuyor ve %20'ye ineceği tarihi veriyor. Sipariş
+     sözü verirken bakılacak sayı budur.
+   ⚠ İKİNCİ SAYI: KÜTÜKTEN SATILAN HACME DÖNÜŞÜM. Alınan tomruk hacmi
+     ile satılan kuru odun hacmi aynı değil: kuruyunca büzüşüyor,
+     yarılırken kayıp oluyor, dipler ve çürükler çıkıyor. Ürün kapanan
+     istiflerde giren-çıkan oranını hesaplıyor. Alım fiyatını bu orana
+     bölmeden metreküp maliyeti bilinmiyor.
+   ⚠ ÜÇÜNCÜ: BUGÜN SATILABİLİR STOK. %20'nin altındaki istiflerde kalan
+     hacim — sözü verilmiş siparişlere karşı.
+   ⚠ DÖRDÜNCÜ: NE DAHA HIZLI KURUYOR. Tür ve istif biçimi kendi
+     avlunda karşılaştırılıyor; kitapta yazan değil, senin ölçtüğün. */
 
-   ⚠ ÜRÜNÜN ANA FİKRİ: AVLUDAKİ PARANIN NE KADARI YANMAYA HAZIR. Toplam
-     stok bir şey söylemiyor; %30 nemdeki yüz kordon, kasım ayında sıfır
-     kordondur. Her istifin kendi nem ölçümü var ve "hazır" bir tahmin
-     değil, bir ÖLÇÜM.
-   ⚠ ODUN KURUDUKÇA KÜÇÜLÜR. Giren yaş kordonla çıkan kuru kordon aynı
-     değil: %8-15 hacim, üstüne %3-8 çürük ve ıskarta. Bu fark hiç
-     yazılmıyor ve kordon maliyeti olduğundan düşük görünüyor.
-   ⚠ SEFER BAŞINA KORDON KÂRI BELİRLER. Aynı kamyon, aynı yakıt, aynı
-     saat; yarım kordonla 40 kilometre gitmek zarardır.
+const FW_SPECIES = ["Ash", "Oak", "Beech", "Birch", "Sycamore", "Alder",
+                    "Hornbeam", "Cherry", "Mixed hardwood", "Softwood"];
+const FW_COVER = ["Open, single row", "Open, deep stack", "Covered top only",
+                  "Under a roof", "In a shed", "Kiln"];
+const FW_UNITS = ["Cubic metre", "Loose cubic metre", "Cord", "Load"];
+const FW_BANDS = {sell:20, eq:15.5, minReads:3, wet:35, shrink:0.9};
 
-   SEKTÖR BANDI (yazmadan önce araştırıldı):
-     kordon = 128 kübik feet istiflenmiş (4×4×8) · yüz kordon 1/3 kordon ·
-     yaş kütük kamyonu 8-10 kordon, $600-1.200 ·
-     kurutma 6-12 ay · yaş nem %45-60, mevsimlik %15-20,
-     fırın kurusu <%20 garantili ·
-     kuru sert odun teslim $250-450/kordon, yaş $150-280,
-     fırın kurusu $400-600 ·
-     işleme 1-3 kordon/saat · sefer başına 1,5-3 kordon ·
-     kuruma büzülmesi %8-15, ıskarta %3-8 ·
-     brüt marj %35-50 · net marj %10-18.                               */
-
-function num1(v){ return num(v, 1); }
-function num2(v){ return num(v, 2); }
-
-const WOOD = [
-  {v:"oak",    t:"Red oak",       btu:24.0, months:12},
-  {v:"whoak",  t:"White oak",     btu:26.4, months:14},
-  {v:"maple",  t:"Sugar maple",   btu:24.0, months:10},
-  {v:"ash",    t:"Ash",           btu:23.6, months:7},
-  {v:"beech",  t:"Beech",         btu:24.0, months:12},
-  {v:"birch",  t:"Yellow birch",  btu:21.8, months:9},
-  {v:"cherry", t:"Black cherry",  btu:20.0, months:8},
-  {v:"hickory",t:"Hickory",       btu:27.7, months:14},
-  {v:"mixed",  t:"Mixed hardwood",btu:22.5, months:10},
-  {v:"pine",   t:"Pine and soft", btu:15.9, months:6}
-];
-const GRADE = [
-  {v:"green",   t:"Green",         wet:[38, 62]},
-  {v:"part",    t:"Part seasoned", wet:[23, 37]},
-  {v:"seasoned",t:"Seasoned",      wet:[13, 22]},
-  {v:"kiln",    t:"Kiln dried",    wet:[8, 15]}
-];
-const SOLD_AS = [
-  {v:"cord",  t:"Full cord",   frac:1},
-  {v:"face",  t:"Face cord",   frac:0.333},
-  {v:"half",  t:"Half cord",   frac:0.5},
-  {v:"bulk",  t:"Bulk load",   frac:1},
-  {v:"bag",   t:"Bagged and bundles", frac:0.04}
-];
-const CALLBACK = ["— none —", "Wood would not light",
-  "Short measure claimed", "Dumped in the wrong place",
-  "Punky and rotten pieces", "Too long for the stove",
-  "Late, missed the cold snap"];
-const CULL_WHY = ["Rot and punk", "Too knotty to split", "Foreign metal",
-  "Sawdust and fines", "Ends checked to nothing"];
-
-function woodOf(v){
-  return WOOD.find(w => w.v === v) || {v:v || "", t:v || "Wood",
-    btu:22, months:10};
+function fwIn(from, to, sid){
+  return rows("readings").filter(r => isRevenue(r) && inRange(r.date, from, to) &&
+    (!sid || r.stackId === sid));
 }
-function gradeOf(v){
-  return GRADE.find(g => g.v === v) || GRADE[0];
-}
-function soldAsOf(v){
-  return SOLD_AS.find(s => s.v === v) || SOLD_AS[0];
-}
-
-/* ── İstif ─────────────────────────────────────────────────────────────
-   ⚠ İSTİF KENDİ SATIRINDA. "Avluda 200 kordon var" diyen tek bir sayı,
-     kaçının yandığını söylemiyor; nem ÖLÇÜMÜ istifin kendi kaydında. */
+function stackName(id){ return nameOf("stacks", id); }
 function stackRow(id){ return byId("stacks", id); }
-function stackName(id){
-  const s = stackRow(id);
-  return s ? s.name : "—";
+function liveStacks(){ return rows("stacks").filter(s => !s.gone); }
+
+function readingsOf(sid){
+  return memo("r:" + sid, () => rows("readings")
+    .filter(r => isRevenue(r) && r.stackId === sid && n0(r.moisture))
+    .slice().sort((a, b) => a.date < b.date ? -1 : 1));
 }
-function stackAgeMonths(S_){
-  return S_ && S_.splitOn ? daysBetween(S_.splitOn, today()) / 30.4 : 0;
+function lastReading(sid){
+  const l = readingsOf(sid); return l.length ? l[l.length - 1] : null;
 }
-function moisture(S_){ return n0(S_.moisture); }
-function isReady(S_){
-  return n0(S_.cordsLeft) > 0 && moisture(S_) > 0 &&
-    moisture(S_) <= (n0(S.set.dryPct) || 20);
-}
-function isWet(S_){
-  return n0(S_.cordsLeft) > 0 && (!moisture(S_) ||
-    moisture(S_) > (n0(S.set.dryPct) || 20));
-}
-function stackValue(S_){
-  return n0(S_.cordsLeft) * n0(S_.costPerCord);
-}
-function meterAgeDays(S_){
-  return S_.meteredOn ? daysBetween(S_.meteredOn, today()) : 9999;
-}
-function readyCords(){
-  return memo("rdc", () => rows("stacks").filter(isReady)
-    .reduce((a, s) => a + n0(s.cordsLeft), 0));
-}
-function wetCords(){
-  return memo("wtc", () => rows("stacks").filter(isWet)
-    .reduce((a, s) => a + n0(s.cordsLeft), 0));
-}
-function yardCords(){ return readyCords() + wetCords(); }
-/* ⚠ AVLUDA YANMAYA HAZIR OLMAYAN PARA. */
-function wetMoney(){
-  return memo("wtm", () => rows("stacks").filter(isWet)
-    .reduce((a, s) => a + stackValue(s), 0));
-}
-function readyMoney(){
-  return memo("rdm", () => rows("stacks").filter(isReady)
-    .reduce((a, s) => a + stackValue(s), 0));
-}
-/* Band: kasıma girerken avlunun %55-75'i hazır olmalı. */
-function readyShare(){
-  const t = yardCords();
-  return t ? readyCords() / t * 100 : 0;
-}
-/* ⚠ KURUDUKÇA KÜÇÜLÜR: giren yaş kordon eksi çıkan kuru kordon. */
-function shrinkPct(S_){
-  const inC = n0(S_.cordsIn);
-  return inC ? (inC - n0(S_.cordsOut) - n0(S_.cordsLeft)) / inC * 100 : 0;
-}
-function cullPct(S_){
-  const inC = n0(S_.cordsIn);
-  return inC ? n0(S_.cordsCulled) / inC * 100 : 0;
-}
-function staleMeters(){
-  return rows("stacks").filter(s => n0(s.cordsLeft) > 0 &&
-    meterAgeDays(s) > (n0(S.set.meterDays) || 60))
-    .sort((a, b) => meterAgeDays(b) - meterAgeDays(a));
-}
-function oldStacks(){
-  return rows("stacks").filter(s => n0(s.cordsLeft) > 0.5 &&
-    stackAgeMonths(s) > 24)
-    .sort((a, b) => stackAgeMonths(b) - stackAgeMonths(a));
+function moistBand(m){
+  if (!m) return {t:"not measured", c:"var(--muted)", pill:"mute"};
+  if (m <= FW_BANDS.sell) return {t:"sellable", c:"var(--good)", pill:"good"};
+  if (m <= 25) return {t:"nearly there", c:"var(--warn)", pill:"warn"};
+  if (m <= FW_BANDS.wet) return {t:"still wet", c:"var(--c1)", pill:"acc"};
+  return {t:"green", c:"var(--bad)", pill:"bad"};
 }
 
-/* ── Sefer ─────────────────────────────────────────────────────────── */
-function cords(L){
-  return n0(L.cords) || n0(L.units) * soldAsOf(L.soldAs).frac;
+/* ── KURUMA EĞRİSİ ────────────────────────────────────────────────── */
+/* ⚠ ÜRÜNÜN BİRİNCİ SAYISI. Nem dengeye doğru ÜSTEL iniyor:
+   m(t) = denge + (m0 − denge)·e^(−k·t). ln(m − denge) ile doğrusal
+   regresyon yapıp k'yı buluyoruz. Doğrusal uydurmak yanlış sonuç
+   verir: baştaki hızlı düşüş sonu da hızlı gösterir. */
+function dryCurve(sid){
+  return memo("dc:" + sid, () => {
+    const l = readingsOf(sid);
+    if (l.length < FW_BANDS.minReads) return null;
+    const t0 = l[0].date;
+    const p = l.map(r => ({x:daysBetween(t0, r.date), m:n0(r.moisture)}))
+      .filter(x => x.m > FW_BANDS.eq + 0.5);
+    if (p.length < FW_BANDS.minReads) {
+      /* Zaten dengeye inmiş. */
+      const son = l[l.length - 1];
+      return {done:true, k:null, from:t0, last:son,
+              moisture:n0(son.moisture)};
+    }
+    let sx = 0, sy = 0, sxy = 0, sxx = 0;
+    p.forEach(q => { const y = Math.log(q.m - FW_BANDS.eq);
+      sx += q.x; sy += y; sxy += q.x * y; sxx += q.x * q.x; });
+    const n = p.length;
+    const payda = n * sxx - sx * sx;
+    if (!payda) return null;
+    const egim = (n * sxy - sx * sy) / payda;
+    const kesim = (sy - egim * sx) / n;
+    const k = -egim;
+    if (k <= 0) return {stuck:true, k:k, from:t0, last:l[l.length - 1],
+                        moisture:n0(l[l.length - 1].moisture)};
+    const m0 = Math.exp(kesim) + FW_BANDS.eq;
+    /* %20'ye inme günü: t = ln((m0−denge)/(20−denge)) / k */
+    const gun = Math.log((m0 - FW_BANDS.eq) / (FW_BANDS.sell - FW_BANDS.eq)) / k;
+    return {k:k, halfLife:Math.log(2) / k, m0:m0, from:t0,
+            days:gun, date:addDays(t0, Math.round(gun)),
+            last:l[l.length - 1], moisture:n0(l[l.length - 1].moisture),
+            n:p.length};
+  });
 }
-function loadValue(L){
-  return n0(L.woodCharge) + n0(L.deliveryCharge) + n0(L.stackCharge) +
-    n0(L.extras) - n0(L.discount) - n0(L.credit);
+function readyState(sid){
+  const c = dryCurve(sid);
+  const son = lastReading(sid);
+  if (!son) return null;
+  const m = n0(son.moisture);
+  if (m <= FW_BANDS.sell)
+    return {ready:true, moisture:m, since:son.date,
+            days:daysBetween(son.date, today())};
+  if (!c || c.stuck || !c.date)
+    return {ready:false, moisture:m, unknown:true};
+  const kalan = daysBetween(today(), c.date);
+  return {ready:false, moisture:m, date:c.date, days:kalan,
+          thisYear:kalan <= 365, curve:c};
 }
-function pricePerCord(L){
-  const c = cords(L);
-  return c ? loadValue(L) / c : 0;
-}
-function woodCost(L){
-  return cords(L) * n0(L.costPerCord);
-}
-function crewPay(L){
-  const c = byId("crew", L.crewId);
-  const rate = c && n0(c.payRate) ? n0(c.payRate) : n0(S.set.crewPay) || 22;
-  return n0(L.hours) * rate;
-}
-function loadCost(L){
-  return woodCost(L) + n0(L.miles) * (n0(S.set.mileCost) || 1.35) +
-    crewPay(L) + n0(L.otherCost);
-}
-function loadProfit(L){ return loadValue(L) - loadCost(L); }
-function loadMargin(L){
-  return loadValue(L) ? loadProfit(L) / loadValue(L) * 100 : 0;
-}
-function hasCallback(L){
-  return !!L.callback && L.callback !== "— none —";
-}
-/* ⚠ SEFER BAŞINA KORDON: kamyon aynı, yakıt aynı. Band 1,5-3. */
-function tripCords(L){ return cords(L); }
-/* ⚠ EŞİK TAM KORDON, 1,5 DEĞİL. 30 km'ye bir kordon götürmek kârlı:
-   $330 odun, $85 nakliye, $40 kamyon. 1,5 eşiği 56 sağlıklı seferi
-   "zararlı" ilan edip uyarıyı gürültüye çeviriyordu. Zararlı olan,
-   uzağa YÜZ KORDON götürmek. */
-function thinTrips(from, to){
-  return loadsIn(from, to).filter(L => n0(L.miles) >= 24 &&
-    cords(L) < 1).sort((a, b) => (cords(a) / Math.max(1, n0(a.miles))) -
-      (cords(b) / Math.max(1, n0(b.miles))));
-}
-/* ⚠ ISLAK SATILAN ODUN GERİ GELİYOR. */
-/* ⚠ YARI KURUMUŞ ODUN "ISLAK SATILDI" DEĞİLDİR: müşteri ne aldığını
-   biliyor. Sadece KURU diye satılıp bandın üstünde çıkan yük sayılıyor;
-   aksi halde uyarı 60 satıra çıkıp gürültüye dönüşüyor. */
-function wetSold(from, to){
-  return loadsIn(from, to).filter(L => n0(L.moistureAtSale) >
-    (n0(S.set.dryPct) || 20) && L.grade !== "green" && L.grade !== "part")
-    .sort((a, b) => n0(b.moistureAtSale) - n0(a.moistureAtSale));
-}
-function callbacks(from, to){
-  return loadsIn(from, to).filter(hasCallback)
-    .sort((a, b) => String(b.deliverOn).localeCompare(String(a.deliverOn)));
+function seasonMonths(sid){
+  const s = stackRow(sid);
+  const c = dryCurve(sid);
+  if (!s || !c || !c.date || !s.cutOn) return null;
+  return daysBetween(s.cutOn, c.date) / 30.4;
 }
 
-/* ── Dönem toplamları ──────────────────────────────────────────────── */
-function loadsIn(from, to){
-  return memo("ld|" + from + "|" + to, () => jobsIn(from, to));
+/* ── HACİM ────────────────────────────────────────────────────────── */
+function loadsOf(sid){
+  return rows("loads").filter(l => l.stackId === sid);
 }
-function cordsIn(from, to){
-  return loadsIn(from, to).reduce((a, L) => a + cords(L), 0);
+function soldVolume(sid){
+  return loadsOf(sid).reduce((a, l) => a + n0(l.volume), 0);
 }
-function cordPriceOverall(from, to){
-  return memo("cp|" + from, () => {
-    const l = loadsIn(from, to);
-    const c = l.reduce((a, L) => a + cords(L), 0);
-    return c ? l.reduce((a, L) => a + loadValue(L), 0) / c : 0;
+function remaining(sid){
+  const s = stackRow(sid);
+  if (!s) return 0;
+  return Math.max(0, n0(s.volumeOut ? s.volumeOut : s.volumeIn * FW_BANDS.shrink) -
+    soldVolume(sid));
+}
+/* ⚠ İKİNCİ SAYI: giren tomruktan çıkan satılabilir hacme dönüşüm. */
+function conversion(){
+  const l = liveStacks().filter(s => s.closed && n0(s.volumeIn) &&
+    soldVolume(s.id) > 0);
+  if (!l.length) return null;
+  const giren = l.reduce((a, s) => a + n0(s.volumeIn), 0);
+  const cikan = l.reduce((a, s) => a + soldVolume(s.id), 0);
+  const her = l.map(s => ({s:s, ratio:soldVolume(s.id) / n0(s.volumeIn)}))
+    .sort((a, b) => a.ratio - b.ratio);
+  return {in:giren, out:cikan, ratio:cikan / giren, n:l.length,
+          worst:her[0], best:her[her.length - 1],
+          /* Alım fiyatı dönüşüme bölünmeden metreküp maliyeti bilinmiyor. */
+          costIn:l.reduce((a, s) => a + n0(s.cost), 0),
+          costPerOut:cikan ? l.reduce((a, s) => a + n0(s.cost), 0) / cikan : 0};
+}
+function stockReady(){
+  const l = liveStacks().filter(s => !s.closed).map(s => ({s:s, r:readyState(s.id)}))
+    .filter(x => x.r && x.r.ready);
+  return {n:l.length, volume:l.reduce((a, x) => a + remaining(x.s.id), 0),
+          list:l};
+}
+function stockDrying(){
+  const l = liveStacks().filter(s => !s.closed).map(s => ({s:s, r:readyState(s.id)}))
+    .filter(x => x.r && !x.r.ready);
+  return {n:l.length, volume:l.reduce((a, x) => a + remaining(x.s.id), 0),
+          list:l.sort((a, b) => (a.r.days === undefined ? 9999 : a.r.days) -
+                                (b.r.days === undefined ? 9999 : b.r.days))};
+}
+function committed(){
+  const l = rows("loads").filter(x => x.status === "ordered" ||
+    (!x.deliveredOn && n0(x.volume)));
+  return {n:l.length, volume:l.reduce((a, x) => a + n0(x.volume), 0), list:l};
+}
+
+/* ── TÜR VE İSTİF ─────────────────────────────────────────────────── */
+/* ⚠ DÖRDÜNCÜ SAYI. */
+function byGroup(field, other){
+  const g = {};
+  liveStacks().forEach(s => {
+    const c = dryCurve(s.id);
+    if (!c || !c.k) return;
+    const k = s[field] || "not recorded";
+    if (!g[k]) g[k] = [];
+    g[k].push({s:s, c:c, months:seasonMonths(s.id)});
   });
+  return Object.keys(g).filter(k => g[k].length >= 1).map(k => {
+    const l = g[k];
+    const ay = l.map(x => x.months).filter(x => x !== null);
+    /* Grubun baskın ÖTEKİ özelliği — karışmayı görebilmek için. */
+    const c = {};
+    l.forEach(x => { const v = x.s[other] || "";
+      c[v] = (c[v] || 0) + 1; });
+    const bask = Object.keys(c).sort((a, b) => c[b] - c[a])[0] || "";
+    return {k:k, n:l.length, other:bask,
+      halfLife:l.reduce((a, x) => a + x.c.halfLife, 0) / l.length,
+      months:ay.length ? ay.reduce((a, x) => a + x, 0) / ay.length : null};
+  }).filter(x => x.months !== null).sort((a, b) => a.months - b.months);
 }
-function cordPriceGrade(from, to, g){
-  const l = loadsIn(from, to).filter(L => L.grade === g);
-  const c = l.reduce((a, L) => a + cords(L), 0);
-  return c ? l.reduce((a, L) => a + loadValue(L), 0) / c : 0;
+/* ⚠ TÜR KARŞILAŞTIRMASI İSTİF BİÇİMİYLE KARIŞABİLİR. Tek sıra dizilmiş
+   kızılağaçla duvar dibine yığılmış meşe arasındaki fark türün değil,
+   istifin farkı olabilir. Ürün bunu söylemeden "kızılağaç 20 ay hızlı"
+   derse yanlış bir şey öğretmiş olur. */
+function speciesGap(){
+  const l = byGroup("species", "cover");
+  if (l.length < 2) return null;
+  const en = l[0], son = l[l.length - 1];
+  return {list:l, best:en, worst:son,
+    gap:son.months - en.months,
+    confounded:en.other !== son.other,
+    bestCover:en.other, worstCover:son.other};
 }
-function cordsPerTrip(from, to){
-  return memo("ct|" + from, () => {
-    const l = loadsIn(from, to).filter(L => n0(L.miles) > 0);
-    return l.length ? l.reduce((a, L) => a + cords(L), 0) / l.length : 0;
-  });
+function coverGap(){
+  const l = byGroup("cover", "species");
+  return l.length >= 2 ? {list:l, best:l[0], worst:l[l.length - 1],
+    gap:l[l.length - 1].months - l[0].months} : null;
 }
-function moistureAtSale(from, to){
-  return memo("ms|" + from, () => {
-    const l = loadsIn(from, to).filter(L => n0(L.moistureAtSale) > 0);
-    const c = l.reduce((a, L) => a + cords(L), 0);
-    return c ? l.reduce((a, L) => a + n0(L.moistureAtSale) * cords(L), 0) / c
-      : 0;
-  });
+function openReadings(){
+  return rows("readings").filter(r => isRevenue(r) && r.status === "watch");
 }
-function callbackRate(from, to){
-  return memo("cb|" + from, () => {
-    const l = loadsIn(from, to);
-    return l.length ? l.filter(hasCallback).length / l.length * 100 : 0;
-  });
+function staleStacks(days){
+  return liveStacks().filter(s => !s.closed).map(s => {
+    const l = lastReading(s.id);
+    return {s:s, since:l ? daysBetween(l.date, today()) : null, last:l};
+  }).filter(x => x.since === null || x.since > (days || 45))
+    .sort((a, b) => (b.since || 9999) - (a.since || 9999));
 }
-function grossMargin(from, to){
-  return memo("gm|" + from, () => {
-    const l = loadsIn(from, to);
-    const v = l.reduce((a, L) => a + loadValue(L), 0);
-    return v ? (v - l.reduce((a, L) => a + woodCost(L), 0)) / v * 100 : 0;
-  });
-}
-/* ⚠ İŞLEME HIZI: yarma ve istifleme saati başına kordon. Band 1-3. */
-function cordsPerHour(){
-  return memo("cph", () => {
-    const l = rows("stacks").filter(s => n0(s.processHours) > 0);
-    const h = l.reduce((a, s) => a + n0(s.processHours), 0);
-    return h ? l.reduce((a, s) => a + n0(s.cordsIn), 0) / h : 0;
-  });
-}
-function shrinkOverall(){
-  return memo("shk", () => {
-    const l = rows("stacks").filter(s => n0(s.cordsIn) > 0);
-    const inC = l.reduce((a, s) => a + n0(s.cordsIn), 0);
-    if (!inC) return 0;
-    const gone = l.reduce((a, s) => a + Math.max(0, n0(s.cordsIn) -
-      n0(s.cordsOut) - n0(s.cordsLeft) - n0(s.cordsCulled)), 0);
-    return gone / inC * 100;
-  });
-}
-function cullOverall(){
-  return memo("cul", () => {
-    const l = rows("stacks").filter(s => n0(s.cordsIn) > 0);
-    const inC = l.reduce((a, s) => a + n0(s.cordsIn), 0);
-    return inC ? l.reduce((a, s) => a + n0(s.cordsCulled), 0) / inC * 100 : 0;
-  });
-}
-function customerCords(c){
-  return rows("loads").filter(L => L.customerId === c.id && isRevenue(L))
-    .reduce((a, L) => a + cords(L), 0);
-}
-function customerSpend(c){
-  return rows("loads").filter(L => L.customerId === c.id && isRevenue(L))
-    .reduce((a, L) => a + loadValue(L), 0);
-}
-function crewCords(id, from, to){
-  return loadsIn(from, to).filter(L => L.crewId === id)
-    .reduce((a, L) => a + cords(L), 0);
-}
+function num2(v){ return Math.round(n0(v) * 10) / 10; }
 
 /* ── 41_demo.js ── */
-/* ═══ ÖRNEK VERİ — ODUNCU ═══════════════════════════════════════════════
-   İşletme: bir avlu, ~90 istif sırası, 4 kişilik ekip, ~330 müşteri,
-   400 günlük sefer defteri.
-   ⚠ NEM TAKVİMDEN ÇIKAR, ELLE YAZILMAZ. Her sıranın nemi yarma
-     tarihinden ve türün kuruma süresinden hesaplanıyor; satış anındaki
-     ölçüm de o günkü değer. Rastgele nem yazmak "üç ay önce yarılmış
-     %14 meşe" gibi imkânsız satırlar üretiyor.
-   ⚠ ODUN SIRADAN ÇIKAR, HAVADAN DEĞİL. Her sefer bir sıradan düşülüyor;
-     eski sıralar önce boşalıyor. Tersini yapıp sefer üretmek, avluda
-     olmayan odunu satmak demek.
-   ⚠ SEKTÖR BANDI: kuru sert odun $250-450/kordon, yaş $150-280,
-     fırın kurusu $400-600 · sefer başına 1,5-3 kordon ·
-     satışta nem %12-20 · büzülme %8-15, ıskarta %3-8 ·
-     işleme 1-3 kordon/saat · geri arama %1-4 · odun brüt marjı %35-50 ·
-     net marj %10-18 · kasıma girerken avlunun %55-75'i hazır. */
+/* ═══ ÖRNEK VERİ — ODUN AVLUSU ═════════════════════════════════════════
+   Dokuz istif (üçü kapanmış), 500 gün, ~90 nem ölçümü, ~70 yük.
+   ⚠ ÜRÜNÜN BİRİNCİ SAYISI eğri uydurmayla çıkıyor, o yüzden ölçümler
+     ÜSTEL eğriden üretilmeli: m(t) = 15,5 + (m0 − 15,5)·e^(−k·t).
+     Doğrusal düşüş yazılsaydı ürünün kendi matematiği veriyle
+     çelişirdi.
+   ⚠ İSTİFLER FARKLI HIZDA KURUMALI, yoksa "tür/istif karşılaştırması"
+     boş çıkar:
+       dişbudak, tek sıra açık  → ~5 ay
+       huş, sundurma altında    → ~6 ay
+       kayın, derin istif       → ~13 ay
+       meşe, duvar dibi derin   → ~23 ay
+   ⚠ İKİNCİ SAYI için KAPANMIŞ istif şart: giren tomruk hacmi ve
+     satılan hacim birlikte olmalı. Dönüşüm %60-70 civarında çıkmalı;
+     %100 çıksaydı ürün yanlış öğretirdi.
+   ⚠ BİR YÜK BİLEREK %22'DE ÇIKMIŞ — uyarının veriyle karşılığı.
+   ⚠ NEM ÖLÇÜMÜ TAZE YÜZEYDEN alınmalı; birkaç kayıt bilerek değil. */
 function DEMO(){
-  const R = seeded(20271126);
+  const R = seeded(20280902);
   const D = n => addDays(today(), n);
   const id = () => uid();
-  const CREW_PAY = 22, MILE = 1.35, DRY = 20, METER_DAYS = 60;
 
-  const crew = [
-    {id:id(), name:"Curtis Vandal", status:"active", grade:"both",
-     phone:phoneNo(R), licence:"Class B", hoursPerWeek:48,
-     payType:"hour", payRate:26, started:D(-3600),
-     notes:"Runs the yard", _share:.30, _call:.7},
-    {id:id(), name:"Marek Dolan", status:"active", grade:"driver",
-     phone:phoneNo(R), licence:"Class B", hoursPerWeek:44,
-     payType:"hour", payRate:23, started:D(-1300), notes:"",
-     _share:.31, _call:1.0},
-    {id:id(), name:"Rennie Ochoa", status:"active", grade:"yard",
-     phone:phoneNo(R), licence:"", hoursPerWeek:40, payType:"hour",
-     payRate:21, started:D(-640), notes:"Processor and stacking",
-     _share:.22, _call:1.2},
-    {id:id(), name:"Kit Halloran", status:"active", grade:"driver",
-     phone:phoneNo(R), licence:"Class C", hoursPerWeek:26,
-     payType:"hour", payRate:20, started:D(-190),
-     notes:"Autumn and winter", _share:.17, _call:1.7},
-    {id:id(), name:"Ford Beaumont", status:"inactive", grade:"logger",
-     phone:phoneNo(R), licence:"Class A", hoursPerWeek:0, payType:"hour",
-     payRate:24, started:D(-2800), notes:"Went back to logging",
-     _share:0, _call:1}
+  /* [ad, tür, istif, yarma günü, hedef gün (20%'ye), m0, hacim, maliyet,
+      kapandı mı] */
+  const tanim = [
+    ["Ash, top row", "Ash", "Open, single row", -400, 150, 47, 22, 690, false],
+    ["Birch, under the lean-to", "Birch", "Covered top only", -300, 180, 49, 16, 480,
+     false],
+    ["Beech, the deep stack", "Beech", "Open, deep stack", -230, 400, 46, 28, 880,
+     false],
+    ["Oak, against the wall", "Oak", "Open, deep stack", -430, 700, 52, 24, 760,
+     false],
+    ["Mixed, this spring", "Mixed hardwood", "Open, single row", -70, 160, 44, 30,
+     900, false],
+    ["Alder, quick row", "Alder", "Open, single row", -150, 120, 45, 12, 300, false],
+    /* ⚠ KAPANMIŞ İSTİFLER — dönüşüm sayısı buradan. */
+    ["Ash, last winter", "Ash", "Open, single row", -520, 150, 47, 26, 800, true],
+    ["Sycamore, last year", "Sycamore", "Covered top only", -560, 200, 48, 20, 620,
+     true],
+    ["Mixed, two winters ago", "Mixed hardwood", "Open, deep stack", -700, 380, 46,
+     34, 1020, true]
   ];
-  const live = crew.filter(c => c._share > 0);
-  const pickCrew = () => {
-    const r = R.bt(0, 1); let a = 0;
-    for (let i = 0; i < live.length; i++){
-      a += live[i]._share; if (r <= a) return live[i];
-    }
-    return live[0];
-  };
 
-  /* ── Nem eğrisi ──────────────────────────────────────────────────────
-     ⚠ NEM TÜRE VE ÖRTÜYE BAĞLI ÜSTEL DÜŞÜŞ. Meşe on iki ay ister,
-       dişbudak yedi; ikisine aynı eğriyi uygulamak "altı aylık kuru
-       meşe" gibi satılamaz bir satır üretiyor. */
-  const wetAt = (sp, months, covered) => {
-    const tau = woodOf(sp).months * (covered ? 0.44 : 0.55);
-    return 12 + 46 * Math.exp(-Math.max(0, months) / tau);
-  };
+  const stacks = tanim.map(x => ({id:id(), name:x[0], species:x[1], cover:x[2],
+    cutOn:addDays(D(x[3]), -R.int(20, 70)), splitOn:D(x[3]),
+    volumeIn:x[6], unit:"Cubic metre", cost:x[7],
+    where:R.pick(["Top of the yard", "By the barn", "Behind the shed",
+      "Along the track"]),
+    closed:x[8], gone:false,
+    notes:x[1] === "Oak" ? "Bought cheap because nobody wants to wait for it" : ""}));
+  const spec = {};
+  stacks.forEach((s, i) => spec[s.id] = {days:tanim[i][4], m0:tanim[i][5],
+    split:tanim[i][3], closed:tanim[i][8]});
 
-  /* ── Avlu: istif sıraları ───────────────────────────────────────── */
-  const SPECIES_W = [["oak", .21], ["mixed", .19], ["maple", .14],
-    ["ash", .12], ["beech", .09], ["birch", .07], ["cherry", .06],
-    ["whoak", .05], ["hickory", .04], ["pine", .03]];
-  const pickSpecies = () => {
-    const r = R.bt(0, 1); let a = 0;
-    for (let i = 0; i < SPECIES_W.length; i++){
-      a += SPECIES_W[i][1]; if (r <= a) return SPECIES_W[i][0];
-    }
-    return "mixed";
-  };
-  const stacks = [];
-    /* ⚠ AVLU YILLIK SATIŞIN YARIM-BİR KATI KADAR DURUR. 34 aylık alım
-     üretip 13 aylık satış üretmek avluda 1.680 kordon biriktiriyordu —
-     iki yıllık satılmamış stok. Pencere kısaltıldı ve -400'den eski
-     sıralar ZATEN SATILMIŞ sayılıyor. */
-  /* ⚠ BU YIL SATILAN ODUN GEÇEN YIL YARILDI. Sıraları tek bir düz
-     pencereye yaymak, 13 aylık satış penceresine kuru odun
-     bırakmıyordu: siparişlerin yarısı karşılıksız kalıp defter 182
-     sefere düşmüştü. İki kohort gerekiyor — satılacak KURU yığın
-     (-1250..-700) ve avluda kuruyan YAŞ yığın (-690..-6). */
-  for (let i = 0; i < 64; i++){
-    const splitDay = i < 38 ? -Math.round(R.bt(700, 1250))
-      : -Math.round(R.bt(6, 690));
-    const sp = pickSpecies();
-    const covered = R.chance(.55);
-    const cordsInV = Math.round(R.bt(20, 42) * 4) / 4;
-    /* ⚠ BÜZÜLME VE ISKARTA ÜRETİM SIRASINDA: giren kordonun bir kısmı
-       kuruyunca hacim kaybediyor, bir kısmı çürük çıkıyor. */
-    const shrink = R.bt(.08, .15);
-    const culled = Math.round(cordsInV * R.bt(.03, .08) * 4) / 4;
-    stacks.push({id:id(),
-      name:"Row " + (i + 1) + " · " + R.pick(["north pad","east fence",
-        "back lane","by the kiln","south pad","top yard","old barn side"]),
-      species:sp, grade:"green",
-      sourcedFrom:R.pick(["Halloran Logging","Beaumont Timber",
-        "County land sale","Storm salvage, town contract",
-        "Pyle Brothers"]),
-      loggedOn:D(splitDay - R.int(10, 90)),
-      splitOn:D(splitDay),
-      processHours:Math.round(cordsInV / R.bt(1.1, 2.6) * 4) / 4,
-      cordsIn:cordsInV, cordsOut:0,
-      cordsLeft:0, cordsCulled:culled,
-      cullWhy:culled ? R.pick(CULL_WHY) : "",
-      moisture:0, meteredOn:"",
-      /* ⚠ MALİYET SIRAYA GİREN KORDON BAŞINA: kütük + yarma + istifleme.
-         Sadece kütük fiyatını yazmak odun brüt marjını %64 gösteriyordu;
-         band %35-50. */
-      costPerCord:Math.round(R.bt(172, 232)),
-      where:R.pick(["North pad, third row","East fence, second row",
-        "Back lane by the gate","Beside the kiln","South pad, front"]),
-      covered:covered, notes:R.chance(.15) ? R.pick([
-        "Storm salvage, some metal found",
-        "Cut long, sixteen inch not eighteen",
-        "Best row we have had off that lot",
-        "Bottom course sitting on dirt, watch it"]) : "",
-      _split:splitDay, _cov:covered,
-      _avail:Math.round((cordsInV * (1 - shrink) - culled) * 100) / 100,
-      _sold:0});
-    const st = stacks[stacks.length - 1];
-    /* bu defterin başlamasından önce satılan kısım */
-    if (splitDay < -1150) st._sold = Math.round(st._avail *
-      R.bt(.55, .90) * 100) / 100;
-  }
-  stacks.sort((a, b) => a._split - b._split);
-
-  /* ── Müşteriler ── */
-  const customers = [];
-  for (let i = 0; i < 336; i++){
-    const trade = R.chance(.04), resort = !trade && R.chance(.05),
-          pizza = !trade && !resort && R.chance(.03);
-    customers.push({id:id(),
-      name:(trade || resort || pizza)
-        ? R.pick(["Wharton","Blue Ridge","Miller's","Cold Creek",
-            "Tavern Road","Pinehurst","Larkin"]) + " " +
-          (trade ? R.pick(["Hardware","General Store","Garden Centre"])
-            : resort ? R.pick(["Lodge","Cabins","Retreat"])
-            : R.pick(["Pizzeria","Kitchen","Smokehouse"]))
-        : personName(R),
-      status:R.chance(.93) ? "active" : "inactive",
-      kind:trade ? "trade" : resort ? "resort" : pizza ? "pizza"
-        : R.chance(.42) ? "stove" : "house",
-      phone:phoneNo(R),
-      address:R.int(2, 480) + " " + R.pick(["Tavern","Mill","Ridge",
-        "Quarry","Pine","Hollow","Bridge","Sawmill","Cold Creek"]) + " " +
-        R.pick(["Road","Lane","Hill","Way","Turnpike"]),
-      miles:Math.round(R.bt(2, 42) * 2) / 2,
-      access:R.pick(["Tip it on the drive","Stack under the carport",
-        "Round the back, past the shed","Top of the drive, it is steep",
-        "Woodshed by the kitchen door"]),
-      since:D(-R.int(20, 3600)),
-      terms:trade ? "Net 30"
-        : R.chance(.2) ? "Half down, half on delivery" : "On delivery",
-      notes:R.chance(.14) ? R.pick([
-        "Small stove, sixteen inch max",
-        "Gate is locked, ring first",
-        "Wants oak only, will pay for it",
-        "Elderly, always stack it"]) : "",
-      _size:R.bt(.7, 1.6), _trade:trade || resort || pizza});
-  }
-
-  /* ── Seferler: 400 gün, MEVSİMSEL ───────────────────────────────── */
+  const readings = [];
   const loads = [];
-  let ref = 4400;
-  const SOLD_W = [["cord", .45], ["face", .28], ["half", .18],
-    ["bulk", .09]];
-  const pickSold = () => {
-    const r = R.bt(0, 1); let a = 0;
-    for (let i = 0; i < SOLD_W.length; i++){
-      a += SOLD_W[i][1]; if (r <= a) return SOLD_W[i][0];
+  const notes = [];
+  let ref = 1;
+
+  const musteriler = ["Mrs Aldridge", "The Fox and Hounds", "Barlow's farm",
+    "K. Pennington", "The village hall", "J. Marsden", "Hollybank Cottage",
+    "The bunkhouse", "R. Teale"];
+
+  stacks.forEach((s, si) => {
+    const sp = spec[s.id];
+    /* k: hedef günde 20'ye insin. */
+    const k = Math.log((sp.m0 - 15.5) / (20 - 15.5)) / sp.days;
+    /* Ölçümler: yarmadan bugüne (ya da kapandıysa satış sonuna kadar). */
+    const son = sp.closed ? sp.split + sp.days + 120 : 0;
+    for (let g = sp.split + 14; g <= Math.min(son, 0); g += R.int(24, 38)){
+      const t = g - sp.split;
+      const m = 15.5 + (sp.m0 - 15.5) * Math.exp(-k * t) + R.bt(-1.4, 1.4);
+      /* ⚠ BİRKAÇ ÖLÇÜM TAZE YÜZEYDEN DEĞİL. */
+      const taze = !(si === 3 && R.chance(0.25));
+      readings.push({id:id(), ref:"M" + String(ref++).padStart(4, "0"), date:D(g),
+        stackId:s.id, moisture:Math.round(m * 10) / 10,
+        fresh:taze,
+        where:R.pick(["Middle", "Middle", "Several places", "Outside row"]),
+        pieces:R.int(2, 5),
+        weather:R.pick(["", "", "Dry week", "Wet fortnight", "Windy"]),
+        status:m > 30 ? "watch" : m <= 20 ? "shown" : "logged",
+        note:"", notes:""});
     }
-    return "cord";
-  };
-  /* ⚠ MEVSİM: eylül-şubat sezon, mayıs-ağustos ölü. */
-  const SEAS = [1.15, 1.00, 0.62, 0.35, 0.22, 0.18, 0.22, 0.30, 0.58,
-                1.08, 1.48, 1.38];
-
-  for (let day = -400; day <= 0; day++){
-    const dt = parseD(D(day)), mo = dt.getMonth(), dow = dt.getDay();
-    if (dow === 0 && R.chance(.85)) continue;
-    const n = Math.max(0, Math.round(R.bt(0.6, 3.4) * SEAS[mo]));
-    for (let k = 0; k < n; k++){
-      const c = R.pick(customers);
-      const hand = pickCrew();
-      /* ⚠ UZAĞA YARIM YÜK GİTMEZ. Mesafeye bakmadan yüz kordon satmak
-         "40 km'ye üçte bir kordon" gibi 152 zararlı sefer üretiyordu. */
-      const soldAs = c._trade && R.chance(.5) ? "bulk"
-        /* ⚠ BİRKAÇ ZARARLI SEFER PLANLI: uzaktaki müşteri "sadece bir
-           yüz kordon" istiyor ve kamyon yine de gidiyor. Bu vaka
-           üretilmezse uyarı ailesi demoda hiç görünmüyor. */
-        : c.miles > 22 ? (R.chance(.045) ? "face"
-            : R.chance(.72) ? "cord" : "bulk")
-        : pickSold();
-      let units, cordsV;
-      if (soldAs === "bulk"){
-        units = 1;
-        cordsV = Math.round(R.bt(2, 4.5) * (c._trade ? 1.3 : 1) * 4) / 4;
-      } else if (soldAs === "cord"){
-        units = R.int(1, 4);
-        cordsV = units;
-      } else if (soldAs === "half"){
-        units = R.chance(.75) ? 1 : 2;
-        cordsV = Math.round(units * 0.5 * 100) / 100;
-      } else {
-        units = R.int(1, 3);
-        cordsV = Math.round(units * 0.333 * 100) / 100;
-      }
-
-      /* ⚠ ODUN BİR SIRADAN ÇIKIYOR: en eski uygun sıra önce boşalır. */
-      const wantGreen = R.chance(.13);
-      /* ⚠ KURU ODUN EN ESKİ SIRADAN, YAŞ ODUN EN YENİSİNDEN ÇIKAR.
-         İkisini de baştan taramak yaş satışı hep "yarı kurumuş"a
-         çeviriyordu ve yaş kordon fiyatı hiç ölçülemiyordu. */
-      let pick = null;
-      if (wantGreen){
-        for (let s = stacks.length - 1; s >= 0; s--){
-          const st = stacks[s];
-          if (st._split > day) continue;
-          if (st._avail - st._sold < cordsV) continue;
-          if (wetAt(st.species, (day - st._split) / 30.4, st._cov) > 38){
-            pick = st; break;
-          }
-        }
-      } else {
-        for (let s = 0; s < stacks.length; s++){
-          const st = stacks[s];
-          if (st._split > day) continue;
-          if (st._avail - st._sold < cordsV) continue;
-          if (wetAt(st.species, (day - st._split) / 30.4, st._cov) <= DRY){
-            pick = st; break;
-          }
-        }
-      }
-      if (!pick) continue;
-      pick._sold = Math.round((pick._sold + cordsV) * 100) / 100;
-      const months = (day - pick._split) / 30.4;
-      const mNow = wetAt(pick.species, months, pick._cov);
-      /* ölçüm aletinin kendi hatası */
-      /* ⚠ ACELE ÇEKİLEN YÜK PLANLI: aralıkta avlu daralınca sıranın
-         nemli ucundan alınıp yine "kuru" diye yazılıyor. Bu vaka
-         üretilmezse "ıslak satıldı" uyarısı demoda hiç görünmüyor —
-         oysa bu, ocak ayındaki telefonun tek sebebi. */
-      const rushed = R.chance(.038) && (mo >= 10 || mo <= 1);
-      const measured = Math.round((mNow + R.bt(-1.4, 1.6) +
-        (rushed ? R.bt(3.5, 9.5) : 0)) * 10) / 10;
-      const grade = rushed ? "seasoned"
-        : measured <= 22 ? "seasoned"
-        : measured <= 37 ? "part" : "green";
-
-      const miles = Math.round(c.miles * R.bt(.95, 1.1) * 2) / 2;
-      const base = grade === "green" ? R.bt(158, 262)
-        : grade === "part" ? R.bt(205, 300)
-        : R.bt(258, 402);
-      const woodCharge = Math.round(cordsV * base * c._size /
-        (c._trade ? 1.28 : 1) / 5) * 5;
-      const deliveryCharge = miles <= 8 && R.chance(.6) ? 0
-        : Math.round((22 + miles * R.bt(1.4, 2.6)) / 5) * 5;
-      const stacked = !c._trade && R.chance(.24);
-      const stackMinutes = stacked
-        ? Math.round(cordsV * R.bt(38, 70)) : 0;
-      const stackCharge = stacked
-        ? Math.round(cordsV * R.bt(48, 88) / 5) * 5 : 0;
-
-      const badWood = measured > DRY && grade !== "green";
-      const called = R.chance((badWood ? .16 : .012) * hand._call);
-      const credit = called
-        ? Math.round((woodCharge + deliveryCharge) * R.bt(.08, .35) / 5) * 5
-        : 0;
-
-      const status = day > -2 ? R.pick(["booked","pulled","loaded"])
-        : day > -14 ? (R.chance(.45) ? "invoiced" : "delivered")
-        : R.chance(.95) ? "paid" : "invoiced";
-
-      loads.push({id:id(), ref:"L-" + (ref++), status:status,
-        deliverOn:D(day), customerId:c.id, stackId:pick.id,
-        species:pick.species, grade:grade,
-        moistureAtSale:measured,
-        soldAs:soldAs, units:units, cords:cordsV,
-        crewId:hand.id, miles:miles,
-        hours:Math.round((cordsV * R.bt(.28, .52) +
-          miles * 0.035 + stackMinutes / 60) * 4) / 4,
-        stackMinutes:stackMinutes,
-        costPerCord:pick.costPerCord,
-        woodCharge:woodCharge, deliveryCharge:deliveryCharge,
-        stackCharge:stackCharge,
-        extras:R.chance(.07) ? R.int(15, 70) : 0,
-        discount:R.chance(.07)
-          ? Math.round(woodCharge * R.bt(.04, .12) / 5) * 5 : 0,
-        credit:credit,
-        callback:called ? (badWood ? "Wood would not light"
-          : R.pick(CALLBACK.slice(1))) : "— none —",
-        otherCost:0,
-        notes:R.chance(.08) ? R.pick([
-          "Tipped at the top of the drive, too steep for the truck",
-          "Sixteen inch, small stove",
-          "Second load this month, going through it fast",
-          "Left the gate open, farmer rang",
-          "Asked for oak next time"]) : ""});
+    /* Satışlar: %20'nin altına indikten sonra. */
+    if (!sp.closed && sp.split + sp.days > -30) return;
+    const hazirGun = sp.split + sp.days;
+    const toplamSatis = s.volumeIn * R.bt(0.58, 0.72);
+    let satilan = 0;
+    for (let g = Math.max(hazirGun, -440); g <= (sp.closed ? Math.min(son, 0) : 0);
+         g += R.int(9, 26)){
+      if (satilan >= toplamSatis) break;
+      const hacim = Math.min(R.bt(1.2, 3.4), toplamSatis - satilan);
+      satilan += hacim;
+      const t = g - sp.split;
+      const m = 15.5 + (sp.m0 - 15.5) * Math.exp(-k * t);
+      loads.push({id:id(), stackId:s.id, date:D(g),
+        customer:R.pick(musteriler),
+        volume:Math.round(hacim * 10) / 10, unit:"Cubic metre",
+        price:Math.round(hacim * R.bt(96, 118)),
+        moisture:Math.round(m * 10) / 10,
+        status:"delivered", deliveredOn:D(g), notes:""});
     }
-  }
-
-  /* ⚠ SIRALARIN BUGÜNKÜ HÂLİ SEFERLERDEN ÇIKAR, TERSİ DEĞİL. */
-  stacks.forEach(function(st){
-    const months = (0 - st._split) / 30.4;
-    st.cordsOut = Math.round(st._sold * 100) / 100;
-    st.cordsLeft = Math.max(0,
-      Math.round((st._avail - st._sold) * 100) / 100);
-    const m = wetAt(st.species, months, st._cov);
-    /* ⚠ ÖLÇÜM ESKİ OLABİLİR: uyarı ailesi bunun üstüne kurulu. */
-    const stale = st.cordsLeft > 0 && R.chance(.16);
-    const daysAgo = stale ? R.int(70, 260) : R.int(2, 55);
-    const mThen = wetAt(st.species, months - daysAgo / 30.4, st._cov);
-    st.moisture = Math.round(Math.max(11, mThen + R.bt(-1.2, 1.4)) * 10) / 10;
-    st.meteredOn = D(-daysAgo);
-    st.grade = m <= 15 ? "seasoned" : m <= 22 ? "seasoned"
-      : m <= 37 ? "part" : "green";
-    if (st.cordsLeft <= 0){ st.moisture = st.moisture; }
-    delete st._split; delete st._cov; delete st._avail; delete st._sold;
-  });
-  crew.forEach(c => { delete c._share; delete c._call; });
-  customers.forEach(c => { delete c._size; delete c._trade; });
-
-  /* ── Faturalar ── */
-  const invoices = [];
-  const groups = new Map();
-  loads.filter(L => L.status === "invoiced" || L.status === "paid")
-    .forEach(L => {
-      const k = L.customerId + "|" + monthKey(L.deliverOn);
-      if (!groups.has(k)) groups.set(k, []);
-      groups.get(k).push(L);
-    });
-  let no = 1001;
-  Array.from(groups.values()).forEach(g => {
-    const c = customers.find(x => x.id === g[0].customerId);
-    const last = g.map(L => L.deliverOn).sort().pop();
-    const inv = {id:id(), no:"INV-" + (no++), clientId:g[0].customerId,
-      date:last, terms:(c && c.terms) || "On delivery",
-      discount:0, extra:0, paidDate:""};
-    if (g.every(L => L.status === "paid")){
-      inv.paidDate = addDays(last, inv.terms === "Net 30" ? R.int(18, 44)
-        : R.int(0, 4));
-      if (inv.paidDate > today()) inv.paidDate = today();
-    }
-    g.forEach(L => L.invoiceId = inv.id);
-    invoices.push(inv);
   });
 
-  /* ── Gider defteri ── */
-  const set = {company:"Cold Creek Firewood",
-    address:"1180 Sawmill Road", city:"Bennington, VT 05201",
-    phone:"(802) 555-0126", email:"yard@coldcreekfirewood.example",
-    skin:"midnight", crewPay:CREW_PAY, mileCost:MILE, dryPct:DRY,
-    meterDays:METER_DAYS, nextInvoice:no, invoiceTerms:"On delivery",
-    termsText:"Seasoned wood is metered on a fresh split face before it leaves the yard and is under twenty percent. A cord is 128 cubic feet stacked. Delivery is charged by distance; stacking is extra and booked in advance."};
-  const RB = Object.assign(monthWindow(13),
-    revenueByMonth(loads.filter(L => L.status !== "cancelled" &&
-      L.status !== "returned"), L => L.deliverOn,
-      L => n0(L.woodCharge) + n0(L.deliveryCharge) + n0(L.stackCharge) +
-        n0(L.extras) - n0(L.discount) - n0(L.credit)));
-  const RR = seeded(660914);
-  const expenses = expenseBook(RR, RB, {
-    fixed:[
-      ["Yard rent", 1450, .02, "Sawmill Road Holdings"],
-      ["Rates", 260, .03, "Town of Bennington"],
-      ["Insurance", 420, .04, "Commercial and vehicle cover"],
-      ["Licences & scale checks", 70, .08, "State weights and measures"],
-      ["Software", 85, .07, "Yard and delivery records"],
-      ["Accounting", 260, .1, "Bookkeeper"]
-    ],
-    variable:[
-      ["Log truck loads", .238, .18, "Logging contractors"],
-      ["Standing timber", .046, .34, "Landowners and county sales"],
-      ["Fuel", .062, .2, "Fuel"],
-      ["Saw chains & bars", .014, .18, "Saw shop"],
-      ["Splitter & processor parts", .022, .26, "Equipment dealer"],
-      ["Payroll taxes & benefits", .052, .08, "Payroll service"],
-      ["Kiln fuel & power", .018, .3, "Energy supplier"],
-      ["Bags & bundles", .009, .22, "Packaging supplier"],
-      ["Card fees", .011, .12, "Card processor"],
-      ["Marketing", .012, .3, "Local ads and signage"]
-    ],
-    occasional:[
-      ["Truck repair", 4, 260, 2400, "Garage"],
-      ["Trailer & bins", 10, 300, 2800, "Equipment dealer"]
-    ]
-  }, 0.14, ["Crew wages", "Yard and delivery payroll"]);
+  /* ⚠ BİR YÜK ISLAK ÇIKMIŞ. */
+  const kayin = stacks.filter(s => s.species === "Beech")[0];
+  loads.push({id:id(), stackId:kayin.id, date:D(-35),
+    customer:"The bunkhouse", volume:2.5, unit:"Cubic metre", price:260,
+    moisture:22.4, status:"delivered", deliveredOn:D(-35),
+    notes:"They needed it and there was nothing else — it was not ready"});
 
-  return {
-    set:Object.assign({}, DEFAULT_SET, set),
-    loads:loads, customers:customers, stacks:stacks, crew:crew,
-    invoices:invoices, expenses:expenses,
-    _meta:{ver:VER, created:today(), device:"", demo:true}
-  };
+  /* ⚠ SÖZÜ VERİLMİŞ SİPARİŞLER. */
+  [["Mrs Aldridge", 3.0, 12], ["The Fox and Hounds", 4.5, 20],
+   ["K. Pennington", 2.0, 26], ["The village hall", 5.0, 40]].forEach(x => {
+    loads.push({id:id(), stackId:stacks[0].id, date:D(x[2]),
+      customer:x[0], volume:x[1], unit:"Cubic metre",
+      price:Math.round(x[1] * 108), moisture:0,
+      status:"ordered", deliveredOn:"", notes:"Promised for " + date(D(x[2]))});
+  });
+
+  notes.push({id:id(), stackId:stacks[3].id, date:D(-260), kind:"Restacked",
+    what:"Pulled the oak apart and restacked it single row",
+    notes:"It had been three deep against the wall doing nothing"});
+  notes.push({id:id(), stackId:"", date:D(-90), kind:"Timber in",
+    what:"Thirty cube of mixed hardwood delivered", notes:""});
+  notes.push({id:id(), stackId:stacks[2].id, date:D(-35), kind:"Customer",
+    what:"Sold the bunkhouse a load off the beech before it was ready",
+    notes:"Not doing that again"});
+  notes.push({id:id(), stackId:"", date:D(-200), kind:"Weather",
+    what:"Six weeks of rain in the autumn", notes:"Everything stalled"});
+
+  readings.sort((a, b) => a.date < b.date ? -1 : 1);
+  loads.sort((a, b) => a.date < b.date ? -1 : 1);
+  return {stacks:stacks, readings:readings, loads:loads, notes:notes};
 }
 
 /* ── 90_config.js ── */
-/* ═══ DİKEY: CORDS & SEASONING ══════════════════════════════════════════
-   Oduncu. Yüzü endüstriyel, açık kabuk, yumuşak yüzey, normal yerleşim.
-   Pano "report": önce yılın grafiği, sonra sayılar — bu iş bir sezon
-   işi ve tek bir ay hiçbir şey anlatmıyor.                            */
+/* ═══ DİKEY: CORDS & SEASONING ═════════════════════════════════════════
+   Odun kurutma ve satış kaydı. Kayıt kipi.
+   Yüzü industrial, yan ray, kart yüzey, sıkı, focus pano. */
 const V = {
-  id:"firewood",
+  id:"firewoodsales",
   name:"Cords & Seasoning",
   initials:"CS",
-  tagline:"What Is Dry, What Is Wet & What a Trip Carries",
-  skin:"midnight",
-  design:{ type:"industrial", shell:"light", surface:"soft",
-           density:"regular", dash:"report",
-           charts:{time:"heat", mix:"tree", part:"bars",
-                   rank:"hbars", side:"scatter"} },
-  about:"How much of the yard is actually dry enough to burn, what a cord costs you once shrinkage and culls are counted, and whether a trip carried enough wood to pay for itself — for a firewood yard. Runs on your own computer: no account, no subscription, no internet needed.",
-  dashSub:"Loads out, cords delivered and what is still drying",
-  allClear:"Every row metered, nothing sold wet, the yard ready for the season.",
-  marginLabel:"Net margin", marginTarget:14,
-  rank:{title:"Revenue by Species", field:"species"},
+  tagline:"The Date Each Stack Reaches Twenty Percent",
+  skin:"clay",
+  noMoney:true,
+  design:{ type:"industrial", shell:"rail", surface:"card",
+           density:"compact", dash:"focus",
+           charts:{time:"area", mix:"donut", part:"bars",
+                   rank:"hbars", side:"histogram"} },
+  about:"Firewood is sold on one number and made on another. The selling number is moisture — under twenty percent or it should not be going out — and the making number is how long that takes, which is not a year and is not the same for ash and oak and is not the same for a single row in the wind as for a deep pile against a wall. This fits a drying curve to each stack's own moisture readings and gives you the date that stack crosses twenty percent, which is the date you can promise it to somebody. Moisture falls towards equilibrium rather than in a straight line, so the curve is exponential; drawing a straight line through three readings will always tell you it is ready sooner than it is. The other figure is yield: what a cubic metre of round timber actually becomes after splitting, shrinking and throwing the rotten bits away, because the price you paid means nothing until it is divided by that. Runs on your own computer: no account, no subscription, no internet needed.",
+  dashSub:"When each stack is sellable, what the timber really yields, and what is ready now",
+  allClear:"Nothing going out over twenty percent.",
+  rank:{title:"Readings by Stack", field:"stackId", entity:"stacks"},
+
+  metric:{key:"moisture", label:"Moisture", unit:"%", low:0, high:FW_BANDS.sell,
+          targetPct:60, fmt:v => num2(v) + "%"},
+  subject:{entity:"stacks", key:"stackId", label:"Stack"},
 
   words:{
-    job:"Load", jobs:"Loads", jobNo:"Load #",
-    jobLower:"load", jobsLower:"loads",
-    client:"Customer", clients:"Customers",
-    worker:"Hand", workers:"Crew",
-    unit:"Stack", units:"Yard",
-    board:"Out today", value:"Load value", newJob:"New load"
+    job:"Reading", jobs:"Readings", jobNo:"Reading",
+    jobLower:"reading", jobsLower:"readings",
+    client:"Stack", clients:"Stacks",
+    board:"By state", value:"Moisture", newJob:"Take a reading"
   },
 
   job:{
-    key:"loads", icon:"truck",
-    clientKey:"customerId", clientEntity:"customers",
-    workerEntity:"crew",
-    refKey:"ref", startKey:"deliverOn", dateKey:"deliverOn",
-    labelHead:"Customer & load", dateHead:"Delivered", qtyHead:"Cords",
-    rateHead:"$ / cord", wasteHead:"Margin",
-    goodRate:250, badRate:170,
-    sub:"Every load, off the row and onto the drive",
-    newHint:"The truck costs the same whether it goes out full or half empty — that is what a cord a trip is really measuring",
-    emptyText:"Book your first load. Cord price, cords a trip and what is still wet in the yard all build from here.",
-    billableHint:"Loads appear here once delivered and not already invoiced.",
+    key:"readings", icon:"chart", board:false,
+    clientKey:"stackId", clientEntity:"stacks",
+    refKey:"ref", startKey:"date", dateKey:"date",
+    labelHead:"Reading", dateHead:"Date", qtyHead:"Moisture",
+    rateHead:"Moisture", wasteHead:"State",
+    goodRate:0, badRate:FW_BANDS.wet,
+    sub:"Moisture on a freshly split face, from the middle of the stack",
+    newHint:"Split a log and measure the fresh face — the outside of a log reads dry within days and means nothing",
+    emptyText:"Take three readings a few weeks apart on a stack. Three is where the curve starts to predict.",
 
     stages:[
-      {v:"booked",    t:"Booked",     c:"var(--c5)", pill:"mute"},
-      {v:"pulled",    t:"Pulled from the row", c:"var(--c2)", pill:"info"},
-      {v:"loaded",    t:"On the truck", c:"var(--c4)", pill:"warn"},
-      {v:"delivered", t:"Delivered",  c:"var(--c1)", pill:"acc"},
-      {v:"invoiced",  t:"Invoiced",   c:"var(--c3)", pill:"info"},
-      {v:"paid",      t:"Paid",       c:"var(--good)", pill:"good"},
-      {v:"cancelled", t:"Cancelled",  c:"var(--muted)", pill:"mute", dead:true},
-      {v:"returned",  t:"Taken back", c:"var(--muted)", pill:"warn", dead:true}
+      {v:"watch",  t:"Wet",       c:"var(--bad)",   pill:"bad"},
+      {v:"logged", t:"Drying",    c:"var(--c1)",    pill:"acc"},
+      {v:"shown",  t:"Sellable",  c:"var(--good)",  pill:"good"},
+      {v:"void",   t:"Discarded", c:"var(--muted)", pill:"mute", dead:true}
     ],
-    open:["booked","pulled","loaded"],
-    dead:["cancelled","returned"],
-    billable:["delivered"],
-    doneState:"delivered", billedState:"invoiced", paidState:"paid",
+    open:["watch"],
+    dead:["void"],
+    doneState:"logged",
 
-    value:L => loadValue(L),
+    value:r => n0(r.moisture),
     fee:() => 0,
-    qty:L => cords(L),
-    qtyUnit:() => "cord",
-    wastePct:L => loadMargin(L),
-    label:L => {
-      const c = byId("customers", L.customerId);
-      return (c ? c.name : "Load") + " — " + num2(cords(L)) + " cords " +
-        woodOf(L.species).t.toLowerCase();
-    },
-    cardSub:L => num2(cords(L)) + " cords · " + gradeOf(L.grade).t +
-      " · " + num1(L.miles) + " miles",
-    blank:() => ({status:"booked", deliverOn:today(), species:"mixed",
-                  grade:"seasoned", soldAs:"cord", units:1}),
+    qty:r => n0(r.moisture),
+    qtyUnit:() => "%",
+    label:r => stackName(r.stackId) + " — " + date(r.date),
+    cardSub:r => num2(r.moisture) + "% · " + moistBand(n0(r.moisture)).t,
+    blank:() => ({status:"logged", date:today(), moisture:30, where:"Middle",
+                  fresh:true}),
 
-    summary:L => {
-      const st = stackRow(L.stackId);
+    summary:r => {
+      const s = stackRow(r.stackId);
+      const c = dryCurve(r.stackId);
+      const rd = readyState(r.stackId);
+      const m = seasonMonths(r.stackId);
+      const conv = conversion();
+      const sp = speciesGap();
+      const cv = coverGap();
+      const kalan = remaining(r.stackId);
       return [
-        {k:"Load", v:num2(cords(L)) + " cords of " +
-          woodOf(L.species).t.toLowerCase() + " · " +
-          gradeOf(L.grade).t.toLowerCase() + " · sold as " +
-          soldAsOf(L.soldAs).t.toLowerCase() +
-          (n0(L.units) > 1 ? " × " + num(L.units) : "")},
-        /* ⚠ NEM BİR ÖLÇÜM. */
-        {k:"Moisture", v:n0(L.moistureAtSale)
-          ? num1(L.moistureAtSale) + "% off the meter" +
-            (st ? " · " + st.name : "") + " · under 20 is saleable"
-          : "not metered before it went out",
-         c:!n0(L.moistureAtSale) ? "var(--bad)"
-           : n0(L.moistureAtSale) <= 20 ? "var(--good)" : "var(--bad)"},
-        {k:"Off the row", v:st
-          ? st.name + " · split " + date(st.splitOn) + " · " +
-            num1(stackAgeMonths(st)) + " months down, " +
-            woodOf(st.species).t.toLowerCase() + " wants " +
-            num(woodOf(st.species).months)
-          : "no row recorded",
-         c:!st ? "var(--muted)"
-           : stackAgeMonths(st) >= woodOf(st.species).months
-             ? "var(--good)" : "var(--warn)"},
-        /* ⚠ SEFER BAŞINA KORDON. */
-        {k:"The trip", v:num1(L.miles) + " miles for " + num2(cords(L)) +
-          " cords · " + money(n0(L.miles) * (n0(S.set.mileCost) || 1.35)) +
-          " of truck · band is 1.5-3 cords a trip",
-         c:cords(L) >= 1 || n0(L.miles) < 24 ? "var(--good)"
-           : "var(--bad)"},
-        {k:"Priced at", v:money0(pricePerCord(L)) + " a cord · " +
-          money(loadValue(L)) + " for the load · seasoned band is "
-          + "$250-450, green $150-280",
-         c:pricePerCord(L) >= 250 ? "var(--good)" : "var(--warn)"},
-        {k:"Wood cost", v:money(woodCost(L)) + " at " +
-          money0(L.costPerCord) + " a cord in · " +
-          pct(loadValue(L) ? (loadValue(L) - woodCost(L)) / loadValue(L) * 100
-            : 0, 0) + " gross on the wood · band is 35-50%"},
-        {k:"Stacked", v:n0(L.stackCharge)
-          ? money(L.stackCharge) + " to stack it" +
-            (n0(L.stackMinutes) ? " · " + num(L.stackMinutes) + " minutes"
-              : "")
-          : "tipped on the drive"},
-        {k:"Came back", v:hasCallback(L)
-          ? L.callback + (n0(L.credit) ? " · " + money(L.credit) +
-              " credited" : "")
-          : "no callback",
-         c:hasCallback(L) ? "var(--bad)" : "var(--good)"},
-        {k:"Left over", v:money(loadProfit(L)) +
-          (loadValue(L) ? " · " + pct(loadMargin(L), 0) : ""),
-         c:loadProfit(L) >= 0 ? "var(--good)" : "var(--bad)"}
+        {k:"This reading", v:num2(r.moisture) + "% · " +
+          moistBand(n0(r.moisture)).t +
+          (r.fresh ? " · taken on a fresh split face" : " · NOT on a fresh face"),
+         c:moistBand(n0(r.moisture)).c},
+        /* ⚠ ÜRÜNÜN BİRİNCİ SAYISI. */
+        {k:"Sellable from", v:!rd ? "—"
+          : rd.ready ? "already there — under twenty since " + date(rd.since)
+          : rd.unknown ? "needs three readings spread over time"
+          : date(rd.date) + " · " + Math.round(rd.days) + " days away",
+         c:!rd ? "var(--muted)" : rd.ready ? "var(--good)" : "var(--c1)"},
+        {k:"How fast this stack dries", v:!c || !c.k ? "—"
+          : "it loses half the distance to equilibrium every " +
+            Math.round(c.halfLife) + " days" +
+            (c.n ? " · fitted to " + c.n + " readings" : ""),
+         c:"var(--muted)"},
+        {k:"From felling", v:m === null ? "add the felling date"
+          : num2(m) + " months from felling to twenty percent · " +
+            (s ? s.species.toLowerCase() + ", " + s.cover.toLowerCase() : ""),
+         c:"var(--c1)"},
+        /* ⚠ İKİNCİ SAYI. */
+        {k:"What the timber yields", v:!conv ? "needs a stack sold out"
+          : Math.round(conv.ratio * 100) + "% of what goes in comes out sellable · " +
+            money(conv.costPerOut) + " a unit once that is allowed for",
+         c:"var(--c1)"},
+        {k:"Left in this stack", v:num2(kalan) + " " +
+          String((s && s.unit) || "cubic metre").toLowerCase() +
+          (s && n0(s.volumeIn) ? " of " + num2(s.volumeIn) + " in" : ""),
+         c:"var(--muted)"},
+        /* ⚠ DÖRDÜNCÜ SAYI. */
+        {k:"Species", v:!sp ? "needs two species with curves"
+          : sp.best.k + " " + num2(sp.best.months) + " months against " +
+            sp.worst.k + " " + num2(sp.worst.months),
+         c:"var(--muted)"},
+        {k:"Stacking", v:!cv ? "needs two ways of stacking"
+          : cv.best.k.toLowerCase() + " " + num2(cv.best.months) +
+            " months against " + cv.worst.k.toLowerCase() + " " +
+            num2(cv.worst.months),
+         c:"var(--muted)"}
       ];
     },
 
     fields:() => [
-      {k:"ref", label:"Load #", req:true, ph:"e.g. L-4410"},
-      {k:"status", label:"Status", type:"select", req:true,
+      {k:"date", label:"Date", type:"date", req:true},
+      {k:"stackId", label:"Stack", type:"ref", ref:"stacks", refLabel:r => r.name,
+       req:true},
+      {k:"moisture", label:"Moisture (%)", type:"num", req:true, min:0, max:80},
+      {k:"fresh", label:"On a fresh split face", type:"check",
+       hint:"A reading off the outside of a log is not a reading"},
+      {k:"where", label:"Where in the stack", type:"select",
+       opts:["Middle", "Outside row", "Bottom", "Top", "Several places"]},
+      {k:"pieces", label:"How many pieces measured", type:"num", min:1, max:20},
+      {k:"weather", label:"Weather lately"},
+      {k:"status", label:"Status", type:"select",
        opts:V.job.stages.map(s => ({v:s.v, t:s.t}))},
-      {k:"deliverOn", label:"Delivered", type:"date", req:true},
-      {k:"customerId", label:"Customer", type:"ref", ref:"customers",
-       refLabel:c => c.name, req:true},
-      {k:"stackId", label:"Off which row", type:"ref", ref:"stacks",
-       refLabel:s => s.name},
-      {k:"species", label:"Species", type:"select",
-       opts:WOOD.map(w => ({v:w.v, t:w.t}))},
-      {k:"grade", label:"Grade", type:"select",
-       opts:GRADE.map(g => ({v:g.v, t:g.t}))},
-      /* ⚠ NEM SATIŞ ANINDA ÖLÇÜLÜR. */
-      {k:"moistureAtSale", label:"Moisture on the meter (%)", type:"num",
-       min:0, step:"0.5",
-       hint:"Meter a fresh split face on the truck — this is the number a callback argues about"},
-      {k:"soldAs", label:"Sold as", type:"select",
-       opts:SOLD_AS.map(s => ({v:s.v, t:s.t}))},
-      {k:"units", label:"How many", type:"num", min:0, step:"0.25"},
-      {k:"cords", label:"Cords (if measured)", type:"num", min:0,
-       step:"0.01", hint:"Leave blank to work it out from what it was sold as"},
-      {k:"crewId", label:"Delivered by", type:"ref", ref:"crew",
-       refLabel:c => c.name},
-      {k:"miles", label:"Miles", type:"num", min:0, step:"0.5"},
-      {k:"hours", label:"Hours", type:"num", min:0, step:"0.25"},
-      {k:"stackMinutes", label:"Minutes stacking", type:"num", min:0},
-      {k:"costPerCord", label:"Cost a cord in", type:"money", min:0},
-      {k:"woodCharge", label:"Wood charged", type:"money", min:0},
-      {k:"deliveryCharge", label:"Delivery charged", type:"money", min:0},
-      {k:"stackCharge", label:"Stacking charged", type:"money", min:0},
-      {k:"extras", label:"Extras", type:"money", min:0},
-      {k:"discount", label:"Discount", type:"money", min:0},
-      {k:"credit", label:"Credited back", type:"money", min:0},
-      {k:"callback", label:"Came back about", type:"select",
-       opts:CALLBACK},
-      {k:"otherCost", label:"Other cost", type:"money", min:0},
-      {k:"notes", label:"Notes", type:"textarea", full:true, rows:2,
-       ph:"Tipped at the top of the drive · sixteen inch, small stove"}
+      {k:"note", label:"Note"},
+      {k:"notes", label:"Longer note", type:"textarea", full:true, rows:2}
     ],
 
     cols:() => [
-      {k:"deliverOn", h:"Delivered", type:"date", w:"104px"},
-      {k:"customerId", h:"Customer & load", calc:L => jobLabel(L),
-        render:L => el("div", {class:"cell-2"}, [
-          el("span", {class:"a",
-            text:nameOf("customers", L.customerId) || "—"}),
-          el("span", {class:"b", text:[woodOf(L.species).t,
-            soldAsOf(L.soldAs).t, L.ref].filter(Boolean).join(" · ")})])},
-      {k:"cords", h:"Cords", type:"num", w:"84px", calc:L => cords(L),
-        render:L => el("span", {class:"mono", text:num2(cords(L))})},
-      {k:"grade", h:"Grade", w:"116px",
-        calc:L => gradeOf(L.grade).t,
-        render:L => el("span", {class:"pill " +
-          (L.grade === "green" ? "warn" : L.grade === "kiln" ? "acc" : "mute")
-          + " plain", text:gradeOf(L.grade).t})},
-      /* ⚠ ANA SÜTUN: ölçülen nem. */
-      {k:"moistureAtSale", h:"Moisture", type:"num", w:"98px",
-        render:L => n0(L.moistureAtSale)
-          ? el("span", {class:"mono", text:num1(L.moistureAtSale) + "%"})
-          : el("span", {class:"sm mut", text:"—"}),
-        tdClass:L => !n0(L.moistureAtSale) ? ""
-          : n0(L.moistureAtSale) <= 20 ? "good"
-          : L.grade === "green" ? "" : "bad"},
-      {k:"ppc", h:"$ a cord", type:"money", w:"106px",
-        calc:L => pricePerCord(L),
-        tdClass:L => pricePerCord(L) >= 250 ? "good" : ""},
-      {k:"miles", h:"Miles", type:"num", w:"78px",
-        render:L => el("span", {class:"mono", text:num1(L.miles)})},
-      /* ⚠ YARIM YÜKLE UZAĞA GİTMEK ZARARDIR. */
-      {k:"trip", h:"Trip", w:"104px",
-        calc:L => n0(L.miles) ? cords(L) / n0(L.miles) : 0,
-        render:L => (n0(L.miles) >= 24 && cords(L) < 1)
-          ? el("span", {class:"pill bad", text:"thin run"})
-          : el("span", {class:"sm mut", text:"—"})},
-      {k:"callback", h:"Came back", w:"152px",
-        calc:L => hasCallback(L) ? L.callback : "",
-        render:L => hasCallback(L)
-          ? el("span", {class:"pill bad", text:L.callback})
-          : el("span", {class:"sm mut", text:"—"})},
-      {k:"value", h:"Load", type:"money", calc:L => loadValue(L)},
-      {k:"margin", h:"Margin", type:"num", w:"84px",
-        calc:L => loadMargin(L),
-        render:L => loadValue(L)
-          ? el("span", {class:"mono", text:pct(loadMargin(L), 0)})
-          : el("span", {class:"sm mut", text:"—"}),
-        tdClass:L => !loadValue(L) ? ""
-          : loadMargin(L) >= 25 ? "good" : "bad"},
-      {k:"status", h:"Status", w:"124px",
-        calc:L => (V.job.stages.find(s => s.v === L.status) || {}).t || "",
-        render:L => { const s = V.job.stages.find(x => x.v === L.status) ||
-            V.job.stages[0];
-          return el("span", {class:"pill " + s.pill, text:s.t}); }}
+      {k:"date", h:"Date", type:"date", w:"104px"},
+      {k:"stackId", h:"Stack", calc:r => stackName(r.stackId)},
+      {k:"moisture", h:"Moisture", w:"140px", calc:r => n0(r.moisture),
+       render:r => { const b = moistBand(n0(r.moisture));
+         return el("span", {class:"pill " + b.pill,
+           text:num2(r.moisture) + "% · " + b.t}); }},
+      {k:"age", h:"Weeks stacked", w:"140px",
+       calc:r => { const s = stackRow(r.stackId);
+         return s && s.splitOn ? daysBetween(s.splitOn, r.date) : -1; },
+       render:r => { const s = stackRow(r.stackId);
+         if (!s || !s.splitOn) return el("span", {class:"mut", text:"—"});
+         return el("span", {class:"mono sm",
+           text:Math.round(daysBetween(s.splitOn, r.date) / 7) + " weeks"}); }},
+      /* ⚠ ÜRÜNÜN BİRİNCİ SAYISI SÜTUN OLARAK. */
+      {k:"ready", h:"On this curve, sellable from", w:"210px",
+       calc:r => { const rd = readyState(r.stackId);
+         return !rd ? 9999 : rd.ready ? -1 : (rd.days === undefined ? 9999 : rd.days); },
+       render:r => { const l = readingsOf(r.stackId);
+         if (!l.length || l[l.length - 1].id !== r.id)
+           return el("span", {class:"mut", text:"—"});
+         const rd = readyState(r.stackId);
+         if (!rd) return el("span", {class:"mut", text:"—"});
+         if (rd.ready) return el("span", {class:"pill good", text:"now"});
+         if (rd.unknown) return el("span", {class:"mut", text:"needs more readings"});
+         return el("span", {class:"pill acc", text:date(rd.date)}); }},
+      {k:"fresh", h:"Fresh face", w:"120px",
+       render:r => el("span", {class:"pill " + (r.fresh ? "good" : "bad") + " plain",
+         text:r.fresh ? "yes" : "no"})},
+      {k:"note", h:"Note",
+       render:r => el("span", {class:"sm mut", text:r.note || r.weather || ""})}
     ],
 
-    footer:list => ({deliverOn:"Total · " + list.length,
-      cords:num1(list.reduce((a, L) => a + cords(L), 0)),
-      miles:num1(list.reduce((a, L) => a + n0(L.miles), 0)),
-      value:money0(list.reduce((a, L) => a + loadValue(L), 0))})
+    footer:list => ({date:"Readings · " + list.length,
+      moisture:list.length ? num2(list.reduce((a, r) => a + n0(r.moisture), 0) /
+        list.length) + "% average" : ""})
+  },
+
+  /* ⚠ ÜRÜNE ÖZGÜ PANEL. Aynı avluda, aynı tarihte yarılmış iki istifin
+     eğrisi. Ürünün birinci sayısı ancak eğri görülünce anlaşılıyor. */
+  dashPanel:st => {
+    const l = liveStacks().map(s => ({s:s, c:dryCurve(s.id),
+        r:readingsOf(s.id)}))
+      .filter(x => x.c && x.c.k && x.r.length >= 3);
+    if (l.length < 2) return null;
+    l.sort((a, b) => (a.c.days || 0) - (b.c.days || 0));
+    const hizli = l[0], yavas = l[l.length - 1];
+    /* Ortak hafta ekseni. */
+    const enUzun = Math.max(hizli.r.length, yavas.r.length);
+    const hafta = [];
+    for (let w = 0; w <= 78; w += 6) hafta.push(w);
+    const egri = x => hafta.map(w => {
+      if (!x.c.k) return null;
+      const m = FW_BANDS.eq + (x.c.m0 - FW_BANDS.eq) * Math.exp(-x.c.k * w * 7);
+      return Math.round(m * 10) / 10;
+    });
+    return el("div", {class:"panel chart grow"}, [
+      el("div", {class:"panel-head"}, [
+        el("h2", {text:"Two Stacks, Same Yard"}),
+        el("div", {class:"sp"}),
+        el("div", {class:"hint", text:hizli.s.name + " in green, " +
+          yavas.s.name + " in red"})
+      ]),
+      el("div", {class:"panel-body"}, [
+        areaChart(hafta.map(w => w + "w"),
+          [{data:egri(hizli), color:"var(--good)"},
+           {data:egri(yavas), color:"var(--bad)"}],
+          {height:240, fmt:v => num2(v) + "%", min:10, max:60}),
+        el("div", {class:"sm mut", style:{marginTop:"8px"},
+          text:hizli.s.name + " (" + hizli.s.species.toLowerCase() + ", " +
+            hizli.s.cover.toLowerCase() + ") gets under twenty percent in about " +
+            Math.round(hizli.c.days / 7) + " weeks; " + yavas.s.name + " (" +
+            yavas.s.species.toLowerCase() + ", " + yavas.s.cover.toLowerCase() +
+            ") takes about " + Math.round(yavas.c.days / 7) + ". Both curves flatten " +
+            "as they approach equilibrium, which is why the last few points take as " +
+            "long as the first twenty — and why a straight line drawn through three " +
+            "early readings always promises the wood sooner than it arrives."})
+      ])
+    ]);
   },
 
   kpis:st => {
-    const t = today();
-    const c = cordsIn(st.from, t);
-    const ppc = cordPriceOverall(st.from, t);
-    const ppcS = cordPriceGrade(st.from, t, "seasoned");
-    const ppcG = cordPriceGrade(st.from, t, "green");
-    const rs = readyShare();
-    const rc = readyCords(), wc = wetCords();
-    const wm = wetMoney();
-    const cpt = cordsPerTrip(st.from, t);
-    const thin = thinTrips(st.from, t);
-    const ms = moistureAtSale(st.from, t);
-    const ws = wetSold(st.from, t);
-    const sh = shrinkOverall(), cu = cullOverall();
-    const cph = cordsPerHour();
-    const cb = callbackRate(st.from, t);
-    const gm = grossMargin(st.from, t);
+    const hazir = stockReady();
+    const kuruyan = stockDrying();
+    const conv = conversion();
+    const sip = committed();
+    const sp = speciesGap();
+    const cv = coverGap();
+    const bayat = staleStacks(45);
+    const sonYuk = rows("loads").filter(l => n0(l.moisture) > FW_BANDS.sell);
+    const ilk = kuruyan.list[0];
     return [
-      {label:"Revenue", value:money0(st.rev), color:"var(--c1)",
-       delta:st.delta(st.rev, st.revPrev),
-       note:num(loadsIn(st.from, t).length) + " loads · " + num1(c) +
-         " cords delivered",
-       spark:st.revSeries.slice(-8)},
-      /* ⚠ ÜRÜNÜN ANA SAYISI: AVLUNUN NE KADARI YANIYOR. */
-      {label:"Ready to Burn", value:rs ? pct(rs, 0) : "—",
-       color:rs >= 55 ? "var(--good)" : "var(--bad)",
-       note:num1(rc) + " cords under 20% against " + num1(wc) +
-         " still wet · you want 55-75% ready going into November"},
-      {label:"Money Still Wet", value:money0(wm), color:"var(--c4)",
-       note:money0(readyMoney()) + " of it is saleable today · the rest "
-         + "is bought, split, stacked and cannot be sold"},
-      {label:"Price a Cord", value:ppc ? money0(ppc) : "—",
-       color:ppc >= 250 ? "var(--good)" : "var(--warn)",
-       note:money0(ppcS) + " seasoned against " + money0(ppcG) +
-         " green · bands are $250-450 and $150-280"},
-      /* ⚠ SEFER BAŞINA KORDON. */
-      {label:"Cords a Trip", value:cpt ? num2(cpt) : "—",
-       color:cpt >= 1.5 ? "var(--good)" : "var(--bad)",
-       note:num(thin.length) + " runs over 24 miles carrying less than a "
-         + "full cord · band is 1.5-3 a trip"},
-      {label:"Moisture Out", value:ms ? num1(ms) + "%" : "—",
-       color:ms <= 20 ? "var(--good)" : "var(--bad)",
-       note:num(ws.length) + " loads left the yard over 20% and not sold "
-         + "as green · band is 12-20%"},
-      /* ⚠ KURUDUKÇA KÜÇÜLÜR. */
-      {label:"Shrink & Culls", value:sh ? pct(sh, 0) : "—",
-       color:sh <= 15 ? "var(--good)" : "var(--warn)",
-       note:pct(cu, 0) + " culled on top · bands are 8-15% shrink and "
-         + "3-8% cull · " + num2(cph) + " cords an hour through the processor"},
-      {label:"Callbacks", value:cb ? pct(cb, 1) : "—",
-       color:cb <= 4 ? "var(--good)" : "var(--bad)",
-       note:pct(gm, 0) + " gross on the wood itself · bands are 1-4% and "
-         + "35-50%"}
+      /* ⚠ AYIRT EDİCİ KART 1. */
+      {label:"Next Stack Ready", value:!ilk || !ilk.r.date ? "—"
+         : Math.round(ilk.r.days) + "d",
+       color:!ilk ? "var(--muted)" : ilk.r.days <= 60 ? "var(--good)" : "var(--c1)",
+       note:ilk && ilk.r.date ? ilk.s.name + " · " + date(ilk.r.date) + " at " +
+              num2(ilk.r.moisture) + "% now"
+              : "three readings on a stack starts the prediction"},
+      /* ⚠ AYIRT EDİCİ KART 2. */
+      {label:"Timber Yield", value:conv ? Math.round(conv.ratio * 100) + "%" : "—",
+       color:!conv ? "var(--muted)" : conv.ratio < 0.65 ? "var(--warn)"
+         : "var(--good)",
+       note:conv ? "of what goes in comes out sellable · " +
+              money(conv.costPerOut) + " a unit once that is allowed for"
+                 : "needs a stack bought, dried and sold out"},
+      /* ⚠ ÜÇÜNCÜ SAYI. */
+      {label:"Ready to Sell", value:num2(hazir.volume),
+       color:hazir.volume >= sip.volume ? "var(--good)" : "var(--warn)",
+       note:hazir.n + " stacks under twenty percent · " + num2(sip.volume) +
+         " promised on orders"},
+      {label:"Still Drying", value:num2(kuruyan.volume),
+       color:"var(--c1)",
+       note:kuruyan.n + " stacks · " + (ilk && ilk.r.date
+         ? "the first is " + date(ilk.r.date) : "no dates yet")},
+      /* ⚠ DÖRDÜNCÜ SAYI. */
+      {label:"Fastest Species", value:sp ? num2(sp.best.months) + "mo" : "—",
+       color:"var(--c4)",
+       note:sp ? sp.best.k + " against " + sp.worst.k + " at " +
+              num2(sp.worst.months) +
+              (sp.confounded ? " · stacked differently, so read it with care"
+                             : " · " + num2(sp.gap) + " months apart")
+               : "needs two species with three readings each"},
+      {label:"Stacking Is Worth", value:cv ? num2(cv.gap) + "mo" : "—",
+       color:"var(--c5)",
+       note:cv ? cv.best.k.toLowerCase() + " " + num2(cv.best.months) +
+              " against " + cv.worst.k.toLowerCase() + " " + num2(cv.worst.months)
+               : "needs two ways of stacking"},
+      {label:"Not Measured Lately", value:num(bayat.length),
+       color:bayat.length ? "var(--warn)" : "var(--good)",
+       note:bayat.length ? bayat[0].s.name + " · " +
+              (bayat[0].since === null ? "never measured"
+               : bayat[0].since + " days ago") : "every stack measured recently"},
+      {label:"Sold Over 20%", value:num(sonYuk.length),
+       color:sonYuk.length ? "var(--bad)" : "var(--good)",
+       note:sonYuk.length ? "loads that went out wet · " + sonYuk[0].customer
+                          : "nothing has gone out over the line"}
     ];
   },
 
-  reports:["pnl","jobs","worker","client"],
-  settings:{
-    invoiceFields:[
-      {k:"crewPay", label:"Crew an hour", type:"money", min:0, step:"0.01"},
-      {k:"mileCost", label:"Cost a mile", type:"money", min:0, step:"0.01",
-       hint:"Truck, fuel and tyres — this is what a thin run has to beat"},
-      {k:"dryPct", label:"Call it dry under (%)", type:"num", min:0,
-       hint:"Twenty percent is the trade line; a stove owner will argue about anything above it"},
-      {k:"meterDays", label:"Meter every row every (days)", type:"num",
-       min:1}
-    ],
-    unitFields:[]
-  },
-  invoiceCols:[{h:"Delivered"}, {h:"Load"}, {h:"Cords", n:true},
-               {h:"$ / cord", n:true}, {h:"Total", n:true}],
-  invoiceLine:L => [
-    {v:esc(date(L.deliverOn))},
-    {v:esc(woodOf(L.species).t) + " · " + esc(gradeOf(L.grade).t) +
-       '<br><span style="color:#777;font-size:10.5px">' +
-       esc(soldAsOf(L.soldAs).t) +
-       (n0(L.moistureAtSale) ? " · " + num1(L.moistureAtSale) + "% moisture"
-         : "") + "</span>"},
-    {v:num2(cords(L)), n:true},
-    {v:money0(pricePerCord(L)), n:true},
-    {v:money(loadValue(L)), n:true}
-  ],
+  reports:["jobs"],
 
   nav:[
-    ["Yard",    ["dash", "loads", "board"]],
-    ["Wood",    ["customers", "stacks"]],
-    ["People",  ["crew"]],
-    ["Money",   ["invoices", "expenses"]],
+    ["Drying",  ["dash", "readings"]],
+    ["Stacks",  ["stacks"]],
+    ["Loads",   ["loads"]],
+    ["Notes",   ["notes"]],
     ["Insight", ["reports"]]
   ],
   counts:{
-    loads:() => callbacks(addDays(today(), -365), today()).length,
-    stacks:() => staleMeters().length + oldStacks().length
+    readings:() => openReadings().length,
+    stacks:() => staleStacks(45).length,
+    loads:() => committed().n
   },
   alerts:() => {
-    const from = addDays(today(), -365);
     const out = [];
-    /* ⚠ ISLAK ODUN GERİ GELİR. */
-    wetSold(from, today()).slice(0, 6).forEach(L => {
-      out.push({kind:"bad", icon:ICON.alert,
-        text:(nameOf("customers", L.customerId) || "A customer") +
-          " took " + num2(cords(L)) + " cords at " +
-          num1(L.moistureAtSale) + "% moisture",
-        note:"Sold as " + gradeOf(L.grade).t.toLowerCase() + " on " +
-          date(L.deliverOn) + " · anything over 20 will hiss in the stove "
-          + "and the call comes in January",
-        go:"loads"});
+    /* ⚠ ÜRÜNÜN BİRİNCİ SAYISI. */
+    stockDrying().list.slice(0, 6).forEach(x => {
+      if (!x.r.date) return;
+      if (x.r.days <= 45)
+        out.push({kind:"good", icon:ICON.cal,
+          text:x.s.name + " is sellable from about " + date(x.r.date),
+          note:num2(x.r.moisture) + "% now, and on its own curve it crosses twenty in " +
+               Math.round(x.r.days) + " days. " + num2(remaining(x.s.id)) +
+               " left in it, which is what you can safely promise.", go:"stacks"});
+      else if (x.r.days > 300)
+        out.push({kind:"warn", icon:ICON.chart,
+          text:x.s.name + " will not be ready until " + date(x.r.date),
+          note:num2(x.r.moisture) + "% now, about " + Math.round(x.r.days / 30.4) +
+               " months away. " + ((x.s.cover || "").indexOf("Open, deep") >= 0 ||
+                 (x.s.cover || "").indexOf("shed") >= 0
+                 ? "Restacking it single row in the wind is the cheapest thing you " +
+                   "can do to that date." : "Worth checking it is getting air.") +
+               " Nothing dries in a deep pile against a wall.", go:"stacks"});
     });
-    /* ⚠ GERİ ARAMA. */
-    callbacks(from, today()).slice(0, 6).forEach(L => {
-      out.push({kind:"bad", icon:ICON.down,
-        text:(nameOf("customers", L.customerId) || "A customer") + ": " +
-          L.callback.toLowerCase(),
-        note:date(L.deliverOn) + " · " + num2(cords(L)) + " cords" +
-          (n0(L.credit) ? " · " + money(L.credit) + " credited" : "") +
-          " · the same customer buys three cords a year for ten years",
-        go:"loads"});
+    /* Ölçülmemiş istifler. */
+    staleStacks(60).slice(0, 5).forEach(x => {
+      out.push({kind:"warn", icon:ICON.doc,
+        text:x.s.name + (x.since === null ? " has never been measured"
+             : " has not been measured in " + x.since + " days"),
+        note:"The curve is only as good as the readings under it, and a stack with two " +
+             "readings cannot be predicted at all.", go:"readings"});
     });
-    /* ⚠ ÖLÇÜLMEYEN İSTİF. */
-    staleMeters().slice(0, 6).forEach(s => {
-      out.push({kind:"warn", icon:ICON.clock,
-        text:s.name + " has not been metered for " +
-          (meterAgeDays(s) > 3000 ? "ever"
-            : num(meterAgeDays(s)) + " days"),
-        note:num2(s.cordsLeft) + " cords standing · " +
-          woodOf(s.species).t.toLowerCase() + " split " + date(s.splitOn) +
-          " · you are guessing at " + num1(s.moisture) + "%",
-        go:"stacks"});
-    });
-    /* ⚠ YARIM YÜKLE UZAĞA GİDEN SEFER. */
-    thinTrips(from, today()).slice(0, 6).forEach(L => {
-      out.push({kind:"warn", icon:ICON.truck,
-        text:num2(cords(L)) + " cords carried " + num1(L.miles) + " miles",
-        note:(nameOf("customers", L.customerId) || "That load") + " on " +
-          date(L.deliverOn) + " · " +
-          money(n0(L.miles) * (n0(S.set.mileCost) || 1.35)) +
-          " of truck against " + money(loadValue(L)) + " of wood · "
-          + "worth holding for a second drop on the same road",
-        go:"loads"});
-    });
-    /* ⚠ İKİ YILI GEÇEN İSTİF ÇÜRÜMEYE BAŞLIYOR. */
-    oldStacks().slice(0, 5).forEach(s => {
+    /* ⚠ İKİNCİ SAYI. */
+    const conv = conversion();
+    if (conv && conv.ratio < 0.7)
       out.push({kind:"warn", icon:ICON.box,
-        text:s.name + " has been down " + num1(stackAgeMonths(s)) +
-          " months",
-        note:num2(s.cordsLeft) + " cords of " +
-          woodOf(s.species).t.toLowerCase() + " · " +
-          money0(stackValue(s)) + " standing · past two years it starts "
-          + "going punky and the BTU goes with it",
+        text:"Only " + Math.round(conv.ratio * 100) +
+             "% of the timber you buy comes out as sellable wood",
+        note:num2(conv.in) + " in and " + num2(conv.out) + " out across " + conv.n +
+             " finished stacks. Shrinkage on drying accounts for about a tenth of " +
+             "that; the rest is splitting waste, rot and the bits nobody wants. It " +
+             "means the timber actually costs " + money(conv.costPerOut) +
+             " a unit rather than " +
+             money(conv.in ? conv.costIn / conv.in : 0) + ".", go:"stacks"});
+    if (conv && conv.worst && conv.best &&
+        conv.worst.ratio < conv.best.ratio * 0.8)
+      out.push({kind:"warn", icon:ICON.chart,
+        text:conv.worst.s.name + " yielded " +
+             Math.round(conv.worst.ratio * 100) + "% against " +
+             Math.round(conv.best.ratio * 100) + " on " + conv.best.s.name,
+        note:"Same yard, different load. Worth knowing which merchant that one came " +
+             "from before buying from them again.", go:"stacks"});
+    /* ⚠ ÜÇÜNCÜ SAYI. */
+    const hazir = stockReady(), sip = committed();
+    if (sip.volume > hazir.volume)
+      out.push({kind:"bad", icon:ICON.alert,
+        text:"You have promised " + num2(sip.volume) + " and only " +
+             num2(hazir.volume) + " is under twenty percent",
+        note:sip.n + " orders on the book. The next stack to come ready is " +
+             (stockDrying().list[0] && stockDrying().list[0].r.date
+               ? stockDrying().list[0].s.name + " on " +
+                 date(stockDrying().list[0].r.date)
+               : "not predictable yet") + ". Selling wet wood is the one thing that " +
+             "loses a firewood round its customers.", go:"loads"});
+    /* Islak çıkan yükler. */
+    rows("loads").filter(l => n0(l.moisture) > FW_BANDS.sell).slice(0, 4)
+      .forEach(l => {
+        out.push({kind:"bad", icon:ICON.alert,
+          text:"A load went to " + (l.customer || "a customer") + " at " +
+               num2(l.moisture) + "%",
+          note:"Over the twenty percent line on " + date(l.date) + ". In much of " +
+               "Europe that is now a legal limit as well as a quality one, and it is " +
+               "the load that gets talked about.", go:"loads"});
+      });
+    /* ⚠ DÖRDÜNCÜ SAYI. */
+    const cv = coverGap();
+    if (cv && cv.gap >= 2)
+      out.push({kind:"good", icon:ICON.chart,
+        text:"Stacking " + cv.best.k.toLowerCase() + " is worth " + num2(cv.gap) +
+             " months against " + cv.worst.k.toLowerCase(),
+        note:num2(cv.best.months) + " months to twenty percent against " +
+             num2(cv.worst.months) + ", measured in your own yard rather than in a " +
+             "book. Over a season that is the difference between selling this year's " +
+             "wood and holding it.", go:"stacks"});
+    const sp = speciesGap();
+    if (sp && sp.gap >= 3)
+      out.push({kind:sp.confounded ? "warn" : "good", icon:ICON.doc,
+        text:sp.confounded
+          ? sp.best.k + " and " + sp.worst.k + " are " + num2(sp.gap) +
+            " months apart, but they are not stacked the same way"
+          : sp.best.k + " seasons " + num2(sp.gap) + " months faster than " +
+            sp.worst.k + " here",
+        note:num2(sp.best.months) + " months against " + num2(sp.worst.months) +
+             ". " + (sp.confounded
+               ? "The " + sp.best.k.toLowerCase() + " is " +
+                 sp.bestCover.toLowerCase() + " and the " + sp.worst.k.toLowerCase() +
+                 " is " + sp.worstCover.toLowerCase() + ", so part of that gap is the " +
+                 "stacking rather than the wood. Stack one row of each the same way " +
+                 "and the answer becomes yours rather than a guess."
+               : "Worth knowing when the merchant offers you a load of the slow one " +
+                 "at a good price — the money is the same, the year of storage is not."),
         go:"stacks"});
-    });
-    /* ⚠ SEZONA HAZIRLIKSIZ GİRMEK. */
-    if (readyShare() < 55 && yardCords() > 0){
-      out.push({kind:"warn", icon:ICON.up,
-        text:"Only " + pct(readyShare(), 0) + " of the yard is dry enough "
-          + "to sell",
-        note:num1(readyCords()) + " cords ready against " +
-          num1(wetCords()) + " still wet · you want 55-75% ready going "
-          + "into November and oak will not get there in six months",
-        go:"stacks"});
-    }
+    /* Taze yüzey. */
+    const yanlis = rows("readings").filter(r => isRevenue(r) && !r.fresh &&
+      daysBetween(r.date, today()) <= 120);
+    if (yanlis.length)
+      out.push({kind:"warn", icon:ICON.doc,
+        text:yanlis.length + " readings this season were not taken on a fresh face",
+        note:"The outside of a split log dries within days and reads five to ten " +
+             "points under the middle. Those readings will make every curve promise " +
+             "the wood too early.", go:"readings"});
     return out;
   },
   demo:() => DEMO(),
@@ -6486,295 +6803,122 @@ const V = {
 };
 
 /* ── 91_entities.js ── */
-/* ═══ ODUNCU VARLIKLARI ═════════════════════════════════════════════════
-   ⚠ İSTİF BİR VARLIK, BİR SAYI DEĞİL. Avludaki toplam kordon, kaçının
-     yanacağını söylemiyor; nem ÖLÇÜMÜ ve yarma tarihi istifin kendi
-     satırında durmak zorunda. Bu ürünün bütün cevabı o satırda.
-   ⚠ İSTİF ÜÇ HACİM TAŞIR: giren yaş kordon, çıkan satılmış kordon ve
-     KALAN. Aradaki fark büzülme ve ıskarta — hiç yazılmayan kalem.   */
-const ONOFF = [{v:"active", t:"Active"}, {v:"inactive", t:"Closed"}];
-const statusPill = v => el("span", {class:"pill " + (v === "active" ? "good" : "mute"),
-  text:(ONOFF.find(a => a.v === v) || {t:"Active"}).t});
-
-const EXP_CAT = ["Log truck loads","Standing timber","Fuel",
-  "Saw chains & bars","Splitter & processor parts","Truck repair",
-  "Trailer & bins","Crew wages","Payroll taxes & benefits",
-  "Yard rent","Rates","Insurance","Kiln fuel & power","Bags & bundles",
-  "Licences & scale checks","Marketing","Card fees","Software",
-  "Accounting","Other"];
-
-V.entities.customers = {
-  title:"Customers", sub:"Who burns what and who calls back",
-  jobField:"customerId", icon:"people", noun:"customer",
-  addLabel:"Add customer", newTitle:"New customer", editTitle:"Customer",
-  sort:"name", dir:"asc", placeholder:"Search name, road, phone…",
-  emptyTitle:"No customers yet",
-  emptyText:"Firewood is a repeat sale with a one-year memory. Who took what, how dry it was and whether they rang back is the whole account.",
-  blank:() => ({status:"active", kind:"house", terms:"On delivery",
-                since:today()}),
-  fields:[
-    {k:"name", label:"Customer", req:true},
-    {k:"status", label:"Status", type:"select", opts:ONOFF, req:true},
-    {k:"kind", label:"Type", type:"select",
-     opts:[{v:"house", t:"Household"}, {v:"stove", t:"Wood stove regular"},
-           {v:"resort", t:"Cabin, lodge or resort"},
-           {v:"trade", t:"Shop or reseller"},
-           {v:"pizza", t:"Restaurant or pizza oven"}]},
-    {k:"phone", label:"Phone"},
-    {k:"address", label:"Address", full:true},
-    {k:"miles", label:"Miles out", type:"num", min:0, step:"0.5"},
-    {k:"access", label:"Where it goes",
-     ph:"Tip it on the drive · stack under the carport"},
-    {k:"since", label:"Customer since", type:"date"},
-    {k:"terms", label:"Terms", type:"select",
-     opts:["On delivery","Half down, half on delivery","Net 30"]},
-    {k:"notes", label:"Notes", type:"textarea", full:true, rows:2,
-     ph:"Small stove, sixteen inch max · gate is locked, ring first"}
-  ],
-  cols:() => [
-    {k:"name", h:"Customer", render:c => el("div", {class:"cell-2"}, [
-      el("span", {class:"a", style:{fontWeight:"500"}, text:c.name || "—"}),
-      el("span", {class:"b", text:[{house:"Household",
-        stove:"Wood stove regular", resort:"Cabin or lodge",
-        trade:"Reseller", pizza:"Pizza oven"}[c.kind] || "", c.phone]
-        .filter(Boolean).join(" · ")})])},
-    {k:"loads", h:"Loads", type:"num", w:"80px",
-      calc:c => rows("loads").filter(L => L.customerId === c.id &&
-        isRevenue(L)).length},
-    {k:"cords", h:"Cords", type:"num", w:"88px",
-      calc:c => customerCords(c),
-      render:c => el("span", {class:"mono", text:num2(customerCords(c))})},
-    {k:"spend", h:"Spent", type:"money", calc:c => customerSpend(c)},
-    {k:"ppc", h:"$ a cord", type:"money", w:"104px", calc:c => {
-      const cd = customerCords(c);
-      return cd ? customerSpend(c) / cd : 0; },
-      tdClass:c => { const cd = customerCords(c);
-        if (!cd) return "";
-        return customerSpend(c) / cd >= 250 ? "good" : "bad"; }},
-    {k:"miles", h:"Miles", type:"num", w:"78px"},
-    /* ⚠ GERİ ARAYAN MÜŞTERİ. */
-    {k:"calls", h:"Callbacks", type:"num", w:"104px",
-      calc:c => rows("loads").filter(L => L.customerId === c.id &&
-        hasCallback(L)).length,
-      render:c => { const n = rows("loads").filter(L =>
-          L.customerId === c.id && hasCallback(L)).length;
-        return n ? el("span", {class:"pill bad", text:num(n)})
-          : el("span", {class:"sm mut", text:"—"}); }},
-    {k:"last", h:"Last load", type:"date", w:"108px", calc:c =>
-      rows("loads").filter(L => L.customerId === c.id)
-        .map(L => L.deliverOn).sort().pop() || ""},
-    {k:"status", h:"Status", w:"104px", calc:c => c.status || "active",
-      render:c => statusPill(c.status)}
-  ],
-  footer:list => ({name:"Total · " + list.length,
-    cords:num1(list.reduce((a, c) => a + customerCords(c), 0)),
-    spend:money0(list.reduce((a, c) => a + customerSpend(c), 0))})
-};
-
+/* ═══ VARLIKLAR: İSTİFLER · YÜKLER · NOTLAR ═══════════════════════════ */
 V.entities.stacks = {
-  title:"Yard", sub:"Every row, when it was split and what the meter says",
-  icon:"box", noun:"stack", addLabel:"Add stack", newTitle:"New stack",
-  editTitle:"Stack", sort:"splitOn", dir:"asc",
-  placeholder:"Search row, species, grade…",
-  emptyTitle:"Nothing in the yard yet",
-  emptyText:"A hundred cords at thirty percent moisture is zero cords in November. Split date, species and the last meter reading are what turn a woodpile into stock.",
-  blank:() => ({name:"", species:"mixed", grade:"green",
-                splitOn:today(), cordsIn:0, cordsOut:0, cordsLeft:0,
-                cordsCulled:0, moisture:48, costPerCord:120}),
-  fields:[
-    {k:"name", label:"Row", req:true, ph:"Row 7 · east fence"},
-    {k:"species", label:"Species", type:"select",
-     opts:WOOD.map(w => ({v:w.v, t:w.t + " · " + w.btu + "M BTU"}))},
-    {k:"grade", label:"Grade", type:"select",
-     opts:GRADE.map(g => ({v:g.v, t:g.t}))},
-    {k:"sourcedFrom", label:"Bought from"},
-    {k:"loggedOn", label:"Logs arrived", type:"date"},
-    /* ⚠ YARMA TARİHİ KURUMANIN BAŞLANGICI. */
+  noun:"Stack", title:"Stacks", icon:"box",
+  sub:"Each stack with the date its own readings say it reaches twenty percent",
+  fields:() => [
+    {k:"name", label:"Name", req:true, ph:"Ash, top of the yard"},
+    {k:"species", label:"Species", type:"select", opts:FW_SPECIES, req:true},
+    {k:"cover", label:"How it is stacked", type:"select", opts:FW_COVER, req:true,
+     hint:"This makes more difference than the species does"},
+    {k:"cutOn", label:"Felled", type:"date"},
     {k:"splitOn", label:"Split and stacked", type:"date", req:true,
-     hint:"Drying starts here, not when the logs arrived — oak needs twelve months from this date"},
-    {k:"processHours", label:"Hours to process", type:"num", min:0,
-     step:"0.25", hint:"A processor does one to three cords an hour"},
-    /* ⚠ ÜÇ HACİM: giren, çıkan, kalan. */
-    {k:"cordsIn", label:"Cords in green", type:"num", min:0, step:"0.25"},
-    {k:"cordsOut", label:"Cords sold off this row", type:"num", min:0,
-     step:"0.25"},
-    {k:"cordsLeft", label:"Cords still standing", type:"num", min:0,
-     step:"0.25"},
-    {k:"cordsCulled", label:"Cords culled", type:"num", min:0,
-     step:"0.25"},
-    {k:"cullWhy", label:"Culled because", type:"select", opts:CULL_WHY,
-     blank:"—"},
-    /* ⚠ NEM BİR ÖLÇÜM, BİR TAHMİN DEĞİL. */
-    {k:"moisture", label:"Moisture (%)", type:"num", min:0, step:"0.5",
-     hint:"Split a piece and meter the fresh face — under twenty is saleable"},
-    {k:"meteredOn", label:"Metered on", type:"date"},
-    {k:"costPerCord", label:"Cost a cord in", type:"money", min:0},
-    {k:"where", label:"Where in the yard", ph:"North pad, third row"},
-    {k:"covered", label:"Top covered", type:"check",
-     hint:"Uncovered rows take three to six months longer"},
+     hint:"Drying starts here, not at felling — a round log barely dries at all"},
+    {k:"volumeIn", label:"Volume in", type:"num", req:true, min:0, max:2000},
+    {k:"unit", label:"Unit", type:"select", opts:FW_UNITS},
+    {k:"cost", label:"What it cost", type:"num", min:0, max:100000},
+    {k:"where", label:"Where in the yard"},
+    {k:"closed", label:"Finished and sold out", type:"check"},
+    {k:"gone", label:"Gone", type:"check"},
     {k:"notes", label:"Notes", type:"textarea", full:true, rows:2}
   ],
   cols:() => [
-    {k:"name", h:"Row", render:s => el("div", {class:"cell-2"}, [
-      el("span", {class:"a", style:{fontWeight:"500"}, text:s.name || "—"}),
-      el("span", {class:"b", text:[woodOf(s.species).t, s.where,
-        s.covered ? "covered" : ""].filter(Boolean).join(" · ")})])},
-    {k:"splitOn", h:"Split", type:"date", w:"104px"},
-    {k:"age", h:"Months", type:"num", w:"88px",
-      calc:s => stackAgeMonths(s),
-      render:s => el("span", {class:"mono", text:num1(stackAgeMonths(s))}),
-      tdClass:s => stackAgeMonths(s) > 24 ? "bad" : ""},
-    /* ⚠ AVLUNUN TEK GERÇEK ÖLÇÜSÜ. */
-    {k:"moisture", h:"Moisture", type:"num", w:"104px",
-      render:s => n0(s.moisture)
-        ? el("span", {class:"mono", text:num1(s.moisture) + "%"})
-        : el("span", {class:"sm mut", text:"never metered"}),
-      tdClass:s => !n0(s.cordsLeft) ? ""
-        : isReady(s) ? "good" : "bad"},
-    {k:"meteredOn", h:"Metered", type:"date", w:"104px",
-      tdClass:s => n0(s.cordsLeft) > 0 && meterAgeDays(s) > 60 ? "bad" : ""},
-    {k:"ready", h:"State", w:"114px",
-      calc:s => isReady(s) ? "Ready" : n0(s.cordsLeft) ? "Wet" : "Sold out",
-      render:s => !n0(s.cordsLeft)
-        ? el("span", {class:"pill mute", text:"Sold out"})
-        : isReady(s) ? el("span", {class:"pill good", text:"Ready"})
-        : el("span", {class:"pill warn", text:"Still wet"})},
-    {k:"cordsIn", h:"In green", type:"num", w:"92px",
-      render:s => el("span", {class:"mono", text:num2(s.cordsIn)})},
-    {k:"cordsLeft", h:"Standing", type:"num", w:"98px",
-      render:s => el("span", {class:"mono", text:num2(s.cordsLeft)})},
-    /* ⚠ KURUDUKÇA KÜÇÜLÜR. */
-    {k:"shrink", h:"Shrink", type:"num", w:"88px", calc:s => shrinkPct(s),
-      render:s => n0(s.cordsIn)
-        ? el("span", {class:"mono", text:pct(shrinkPct(s), 0)})
-        : el("span", {class:"sm mut", text:"—"}),
-      tdClass:s => !n0(s.cordsIn) ? ""
-        : shrinkPct(s) <= 15 ? "good" : "bad"},
-    {k:"cordsCulled", h:"Culled", type:"num", w:"88px",
-      render:s => n0(s.cordsCulled)
-        ? el("span", {class:"mono", text:num2(s.cordsCulled)})
-        : el("span", {class:"sm mut", text:"—"})},
-    {k:"cph", h:"Cords an hour", type:"num", w:"126px",
-      calc:s => n0(s.processHours) ? n0(s.cordsIn) / n0(s.processHours) : 0,
-      render:s => n0(s.processHours)
-        ? el("span", {class:"mono",
-            text:num2(n0(s.cordsIn) / n0(s.processHours))})
-        : el("span", {class:"sm mut", text:"—"}),
-      tdClass:s => !n0(s.processHours) ? ""
-        : n0(s.cordsIn) / n0(s.processHours) >= 1 ? "good" : "bad"},
-    {k:"value", h:"Standing value", type:"money",
-      calc:s => stackValue(s)}
+    {k:"name", h:"Stack"},
+    {k:"species", h:"Species", w:"140px",
+     render:s => el("span", {class:"pill mute plain", text:s.species || "—"})},
+    {k:"cover", h:"Stacked", w:"170px",
+     render:s => el("span", {class:"sm mut", text:s.cover || ""})},
+    {k:"moisture", h:"Moisture", w:"140px",
+     calc:s => { const l = lastReading(s.id); return l ? n0(l.moisture) : 99; },
+     render:s => { const l = lastReading(s.id);
+       if (!l) return el("span", {class:"mut", text:"not measured"});
+       const b = moistBand(n0(l.moisture));
+       return el("span", {class:"pill " + b.pill,
+         text:num2(l.moisture) + "% · " + b.t}); }},
+    /* ⚠ ÜRÜNÜN BİRİNCİ SAYISI. */
+    {k:"ready", h:"Sellable from", w:"230px",
+     calc:s => { const r = readyState(s.id);
+       return !r ? 9999 : r.ready ? -1 : (r.days === undefined ? 9999 : r.days); },
+     render:s => { const r = readyState(s.id);
+       if (!r) return el("span", {class:"mut", text:"—"});
+       if (r.ready) return el("span", {class:"pill good",
+         text:"ready since " + date(r.since)});
+       if (r.unknown) return el("span", {class:"mut",
+         text:"needs three readings over time"});
+       return el("span", {class:"pill " + (r.days <= 60 ? "warn" : "acc"),
+         text:date(r.date) + " · " + Math.round(r.days) + " days"}); }},
+    {k:"months", h:"Months to season", w:"150px",
+     calc:s => { const m = seasonMonths(s.id); return m === null ? 99 : m; },
+     render:s => { const m = seasonMonths(s.id);
+       if (m === null) return el("span", {class:"mut", text:"—"});
+       return el("span", {class:"sm", text:num2(m) + " from felling"}); }},
+    {k:"left", h:"Left", w:"130px", calc:s => remaining(s.id),
+     render:s => el("span", {class:"mono sm",
+       text:num2(remaining(s.id)) + " " +
+         String(s.unit || "m³").toLowerCase().slice(0, 6)})}
   ],
-  footer:list => ({name:"Total · " + list.length,
-    cordsIn:num1(list.reduce((a, s) => a + n0(s.cordsIn), 0)),
-    cordsLeft:num1(list.reduce((a, s) => a + n0(s.cordsLeft), 0)),
-    value:money0(list.reduce((a, s) => a + stackValue(s), 0))})
+  blank:() => ({species:"Ash", cover:"Open, single row", unit:"Cubic metre",
+                splitOn:today()})
 };
 
-V.entities.crew = {
-  title:"Crew", sub:"Cords moved and how many loads came back",
-  jobField:"crewId", icon:"driver", noun:"hand", addLabel:"Add hand",
-  newTitle:"New hand", editTitle:"Hand", sort:"name", dir:"asc",
-  emptyTitle:"Nobody on the crew yet",
-  emptyText:"Splitting, stacking and delivering are three different jobs with three different rates. Cords an hour is the only number that compares them.",
-  blank:() => ({status:"active", payType:"hour", payRate:22,
-                hoursPerWeek:40}),
-  fields:[
-    {k:"name", label:"Hand", req:true},
-    {k:"status", label:"Status", type:"select", opts:ONOFF, req:true},
-    {k:"grade", label:"Does", type:"select",
-     opts:[{v:"yard", t:"Yard and processor"},
-           {v:"driver", t:"Delivery driver"},
-           {v:"both", t:"Yard and delivery"},
-           {v:"logger", t:"Logging and hauling"}]},
-    {k:"phone", label:"Phone"},
-    {k:"licence", label:"Licence class"},
-    {k:"hoursPerWeek", label:"Hours a week", type:"num", min:0, step:"0.5"},
-    {k:"payType", label:"Pay basis", type:"select", req:true,
-     opts:[{v:"hour", t:"Per hour"}, {v:"flat", t:"Flat per load"},
-           {v:"percent", t:"Percent of the load"}]},
-    {k:"payRate", label:"Pay rate", type:"num", step:"0.01"},
-    {k:"started", label:"Started", type:"date"},
-    {k:"notes", label:"Notes", type:"textarea", full:true, rows:2}
-  ],
-  cols:() => [
-    {k:"name", h:"Hand", render:c => el("div", {class:"cell-2"}, [
-      el("span", {class:"a", style:{fontWeight:"500"}, text:c.name || "—"}),
-      el("span", {class:"b", text:[{yard:"Yard and processor",
-        driver:"Delivery driver", both:"Yard and delivery",
-        logger:"Logging and hauling"}[c.grade] || "", c.licence]
-        .filter(Boolean).join(" · ")})])},
-    {k:"hoursPerWeek", h:"Hours/wk", type:"num", w:"96px"},
-    {k:"loads", h:"Loads", type:"num", w:"84px",
-      calc:c => rows("loads").filter(L => L.crewId === c.id &&
-        isRevenue(L)).length},
-    {k:"cords", h:"Cords", type:"num", w:"92px",
-      calc:c => crewCords(c.id, addDays(today(), -365), today()),
-      render:c => el("span", {class:"mono",
-        text:num1(crewCords(c.id, addDays(today(), -365), today()))})},
-    {k:"cpt", h:"Cords a trip", type:"num", w:"122px", calc:c => {
-      const l = rows("loads").filter(L => L.crewId === c.id &&
-        isRevenue(L) && n0(L.miles) > 0);
-      return l.length ? l.reduce((a, L) => a + cords(L), 0) / l.length : 0; },
-      render:c => { const l = rows("loads").filter(L => L.crewId === c.id &&
-          isRevenue(L) && n0(L.miles) > 0);
-        return el("span", {class:"mono", text:l.length
-          ? num2(l.reduce((a, L) => a + cords(L), 0) / l.length) : "—"}); },
-      tdClass:c => { const l = rows("loads").filter(L => L.crewId === c.id &&
-          isRevenue(L) && n0(L.miles) > 0);
-        if (!l.length) return "";
-        return l.reduce((a, L) => a + cords(L), 0) / l.length >= 1.5
-          ? "good" : "bad"; }},
-    /* ⚠ GERİ GELEN SEFER. */
-    {k:"calls", h:"Callbacks", type:"num", w:"104px", calc:c => {
-      const l = rows("loads").filter(L => L.crewId === c.id && isRevenue(L));
-      return l.length ? l.filter(hasCallback).length / l.length * 100 : 0; },
-      render:c => { const l = rows("loads").filter(L => L.crewId === c.id &&
-          isRevenue(L));
-        return el("span", {class:"mono", text:l.length
-          ? pct(l.filter(hasCallback).length / l.length * 100, 1) : "—"}); },
-      tdClass:c => { const l = rows("loads").filter(L => L.crewId === c.id &&
-          isRevenue(L));
-        if (!l.length) return "";
-        return l.filter(hasCallback).length / l.length * 100 <= 4
-          ? "good" : "bad"; }},
-    {k:"miles", h:"Miles", type:"num", w:"92px",
-      calc:c => rows("loads").filter(L => L.crewId === c.id && isRevenue(L))
-        .reduce((a, L) => a + n0(L.miles), 0)},
-    {k:"rev", h:"Earned", type:"money",
-      calc:c => rows("loads").filter(L => L.crewId === c.id && isRevenue(L))
-        .reduce((a, L) => a + loadValue(L), 0)},
-    {k:"pay", h:"Their pay", type:"money", calc:c => workerPay(c)},
-    {k:"status", h:"Status", w:"104px", calc:c => c.status || "active",
-      render:c => statusPill(c.status)}
-  ]
-};
-
-V.entities.expenses = {
-  title:"Expenses", sub:"Log loads, fuel, chains and the yard",
-  icon:"cash", noun:"expense", addLabel:"Add expense",
-  newTitle:"New expense", editTitle:"Expense", sort:"date", dir:"desc",
-  emptyTitle:"No expenses yet",
-  emptyText:"Log loads are paid for a year before the wood is dry enough to sell. Without these a good winter hides a bad buying season.",
-  blank:() => ({date:today(), category:"Log truck loads"}),
-  fields:[
+V.entities.loads = {
+  noun:"Load", title:"Loads", icon:"truck",
+  sub:"What went out, from which stack — this is the other half of the yield figure",
+  fields:() => [
+    {k:"stackId", label:"From which stack", type:"ref", ref:"stacks",
+     refLabel:r => r.name, req:true},
     {k:"date", label:"Date", type:"date", req:true},
-    {k:"category", label:"Category", type:"select", opts:EXP_CAT, req:true},
-    {k:"amount", label:"Amount", type:"money", req:true, min:0},
-    {k:"vendor", label:"Paid to"},
-    {k:"ref", label:"Invoice #"},
+    {k:"customer", label:"Customer"},
+    {k:"volume", label:"Volume", type:"num", req:true, min:0, max:500},
+    {k:"unit", label:"Unit", type:"select", opts:FW_UNITS},
+    {k:"price", label:"Price", type:"num", min:0, max:20000},
+    {k:"moisture", label:"Moisture at loading (%)", type:"num", min:0, max:80,
+     hint:"Worth recording — it is what the customer is buying"},
+    {k:"status", label:"State", type:"select",
+     opts:[{v:"ordered", t:"Ordered"}, {v:"delivered", t:"Delivered"}]},
+    {k:"deliveredOn", label:"Delivered", type:"date"},
     {k:"notes", label:"Notes", type:"textarea", full:true, rows:2}
   ],
   cols:() => [
     {k:"date", h:"Date", type:"date", w:"104px"},
-    {k:"category", h:"Category", render:e =>
-      el("span", {class:"pill mute plain", text:e.category || "—"})},
-    {k:"vendor", h:"Paid to"},
-    {k:"ref", h:"Invoice #", w:"110px"},
-    {k:"amount", h:"Amount", type:"money"}
+    {k:"customer", h:"Customer", w:"180px"},
+    {k:"stackId", h:"From", w:"180px", calc:l => stackName(l.stackId)},
+    {k:"volume", h:"Volume", w:"110px", calc:l => n0(l.volume),
+     render:l => el("span", {class:"mono sm", text:num2(l.volume)})},
+    {k:"moisture", h:"Moisture out", w:"150px", calc:l => n0(l.moisture),
+     render:l => { if (!n0(l.moisture)) return el("span", {class:"mut", text:"—"});
+       return el("span", {class:"pill " + (n0(l.moisture) <= FW_BANDS.sell ? "good"
+         : "bad"), text:num2(l.moisture) + "%"}); }},
+    {k:"price", h:"Price", w:"110px", calc:l => n0(l.price),
+     render:l => el("span", {class:"mono sm", text:n0(l.price) ? money0(l.price) : ""})},
+    {k:"status", h:"State", w:"120px",
+     render:l => el("span", {class:"pill " + (l.status === "ordered" ? "warn"
+       : "good") + " plain", text:l.status === "ordered" ? "ordered" : "delivered"})}
   ],
-  footer:list => ({date:"Total · " + list.length,
-    amount:money0(list.reduce((a, e) => a + n0(e.amount), 0))})
+  blank:() => ({date:today(), unit:"Cubic metre", status:"delivered",
+                deliveredOn:today()})
+};
+
+V.entities.notes = {
+  noun:"Note", title:"Notes", icon:"doc",
+  sub:"Weather, deliveries in, and anything that explains a slow stack",
+  fields:() => [
+    {k:"stackId", label:"Stack", type:"ref", ref:"stacks", refLabel:r => r.name},
+    {k:"date", label:"Date", type:"date", req:true},
+    {k:"kind", label:"What", type:"select",
+     opts:["Timber in", "Weather", "Restacked", "Machinery", "Customer", "Other"]},
+    {k:"what", label:"What happened"},
+    {k:"notes", label:"Notes", type:"textarea", full:true, rows:2}
+  ],
+  cols:() => [
+    {k:"date", h:"Date", type:"date", w:"104px"},
+    {k:"stackId", h:"Stack", w:"180px", calc:v => stackName(v.stackId)},
+    {k:"kind", h:"What", w:"140px",
+     render:v => el("span", {class:"pill mute plain", text:v.kind || "—"})},
+    {k:"what", h:"What happened"}
+  ],
+  blank:() => ({date:today(), kind:"Weather"})
 };
 
 boot();
