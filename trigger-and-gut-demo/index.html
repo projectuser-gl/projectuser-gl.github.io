@@ -6162,6 +6162,14 @@ function cleanStreak(personId, esik){
   }
   return n;
 }
+/* En uzun sakin seri — "şu an 0" kartı tek başına umutsuz görünüyor. */
+function bestCleanRun(personId, from, to, esik){
+  const e = esik === undefined ? 3 : esik;
+  const l = ibsIn(from, to, personId).slice().sort((a, b) => a.date < b.date ? -1 : 1);
+  let en = 0, n = 0;
+  l.forEach(r => { if (n0(r.sx) <= e){ n++; if (n > en) en = n; } else n = 0; });
+  return en;
+}
 function urgentDays(from, to, personId){
   return ibsIn(from, to, personId).filter(r => r.urgent).length;
 }
@@ -6218,7 +6226,7 @@ function DEMO(){
     {off:-175, group:IBS_FODMAP[0], food:"2 slices wheat bread",
      doses:"half slice, 1 slice, 2 slices", eff:3.4, said:"Reacted"},
     {off:-154, group:IBS_FODMAP[1], food:"1 cup chickpeas",
-     doses:"quarter cup, half cup, 1 cup", eff:1.7, said:"Reacted"},
+     doses:"quarter cup, half cup, 1 cup", eff:3.2, said:"Reacted"},
     {off:-133, group:IBS_FODMAP[4], food:"4 dried apricots",
      doses:"1, 2, 4", eff:0.8, said:"Tolerated in small amounts"},
     {off:-112, group:IBS_FODMAP[3], food:"1 mango",
@@ -6560,9 +6568,10 @@ const V = {
       .filter(x => x.v.ok);
     const temiz = ch.filter(x => x.v.verdict.indexOf("Tolerated") === 0).length;
     const ort = ibsAvg(l);
-    const acil = urgentDays(from, to);
-    const kayip = missedDays(addDays(today(), -30), today());
+    const acil = urgentDays(from, to, pid);
+    const kayip = missedDays(addDays(today(), -30), today(), pid);
     const st2 = pid ? cleanStreak(pid) : 0;
+    const bestRun = pid ? bestCleanRun(pid, from, to) : 0;
     const kalan = IBS_FODMAP.filter(g =>
       !rows("challenges").some(c => c.group === g)).length;
     return [
@@ -6585,7 +6594,7 @@ const V = {
        delta:prev.length && ibsAvg(prev)
          ? ((ort - ibsAvg(prev)) / ibsAvg(prev)) * 100 : null},
       {label:"Settled Run", value:num(st2), color:st2 >= 7 ? "var(--good)" : "var(--c4)",
-       note:"days in a row at 3 or under"},
+       note:"days in a row at 3 or under · best " + bestRun + " this period"},
       {label:"Urgent Days", value:num(acil), color:acil > l.length * 0.2 ? "var(--warn)" : "var(--c5)",
        note:"had to run for it"},
       {label:"Days Lost", value:num(kayip),

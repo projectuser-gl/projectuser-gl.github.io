@@ -6237,46 +6237,47 @@ function DEMO(){
   const id = () => uid();
 
   const people = [
-    {id:id(), name:"Derya Onat", since:D(-3600), diagnosed:D(-560),
-     stage:"Stage III (moderate)", usualCycle:28, clinic:"Gynaecology · Acıbadem",
-     notes:"Six years of being told it was normal period pain"},
-    /* ⚠ TANISI YOK — uyarı bundan çıkıyor. */
+    /* ⚠ İLK KİŞİ ÜRÜNÜN ALICISI: yıllardır ağrısı var, tanısı yok ve ağrı
+       artık regl haftasına sığmıyor. Pano ve uyarılar ondan konuşuyor. */
     {id:id(), name:"Sena Bulut", since:D(-1500), diagnosed:"",
      stage:"Suspected, not confirmed", usualCycle:31, clinic:"GP · Bornova",
-     notes:"Referral waiting; pain has spread out of the period week"}
+     notes:"Referral waiting; pain has spread out of the period week"},
+    {id:id(), name:"Derya Onat", since:D(-3600), diagnosed:D(-560),
+     stage:"Stage III (moderate)", usualCycle:28, clinic:"Gynaecology · Acıbadem",
+     notes:"Six years of being told it was normal period pain"}
   ];
 
   const treatments = [
-    {id:id(), personId:people[0].id, name:"Combined pill", kind:"Hormonal",
+    {id:id(), personId:people[1].id, name:"Combined pill", kind:"Hormonal",
      started:D(-540), stopped:D(-330), baselinePain:7, verdict:"No difference",
      sideEffects:"nausea for the first month", notes:"Ran it back to back, still bad"},
-    {id:id(), personId:people[0].id, name:"Laparoscopy + excision", kind:"Surgery",
+    {id:id(), personId:people[1].id, name:"Laparoscopy + excision", kind:"Surgery",
      started:D(-320), stopped:D(-320), baselinePain:7, verdict:"Clearly helped",
      sideEffects:"three weeks off work", notes:"Stage III confirmed on the day"},
-    {id:id(), personId:people[0].id, name:"Mirena coil", kind:"Hormonal",
+    {id:id(), personId:people[1].id, name:"Mirena coil", kind:"Hormonal",
      started:D(-300), stopped:"", baselinePain:7, verdict:"Clearly helped",
      sideEffects:"spotting for four months", notes:"Fitted at the same clinic"},
-    {id:id(), personId:people[1].id, name:"Naproxen", kind:"Painkiller",
+    {id:id(), personId:people[0].id, name:"Naproxen", kind:"Painkiller",
      started:D(-400), stopped:"", baselinePain:6, verdict:"Some help",
      sideEffects:"stomach", notes:"Only touches it if taken before it starts"},
-    {id:id(), personId:people[1].id, name:"Pelvic physio", kind:"Physio",
+    {id:id(), personId:people[0].id, name:"Pelvic physio", kind:"Physio",
      started:D(-120), stopped:"", baselinePain:6, verdict:"Too early to say",
      sideEffects:"", notes:"Six sessions booked"}
   ];
 
   const visits = [
-    {id:id(), personId:people[0].id, date:D(-600), who:"GP",
+    {id:id(), personId:people[1].id, date:D(-600), who:"GP",
      asked:"Period pain that stops me working",
      said:"Try the pill for six months", nextDate:D(-380)},
-    {id:id(), personId:people[0].id, date:D(-380), who:"Gynaecology",
+    {id:id(), personId:people[1].id, date:D(-380), who:"Gynaecology",
      asked:"The pill did nothing, here are eleven months of entries",
      said:"Listing for a laparoscopy", nextDate:D(-320)},
-    {id:id(), personId:people[0].id, date:D(-280), who:"Gynaecology",
+    {id:id(), personId:people[1].id, date:D(-280), who:"Gynaecology",
      asked:"Post-op check", said:"Coil in, review in a year", nextDate:D(40)},
-    {id:id(), personId:people[1].id, date:D(-430), who:"GP",
+    {id:id(), personId:people[0].id, date:D(-430), who:"GP",
      asked:"Pain most of the month now, not just the period",
      said:"Naproxen, come back if no better", nextDate:D(-120)},
-    {id:id(), personId:people[1].id, date:D(-120), who:"GP",
+    {id:id(), personId:people[0].id, date:D(-120), who:"GP",
      asked:"No better, and I am missing work",
      said:"Referring to gynaecology, keep the diary", nextDate:D(60)}
   ];
@@ -6304,10 +6305,13 @@ function DEMO(){
         /* ⚠ TEDAVİ ETKİSİ: ameliyat/coil sonrası taban düşüyor. */
         const sonra = opt.dropAfter !== undefined && g > opt.dropAfter;
         const taban = cycleCurve(d, uzunluk) * (sonra ? opt.dropTo : 1);
-        /* ⚠ SİKLİK OLMAYAN ZEMİN: Sena'da döngüden bağımsız sabit ağrı. */
+        /* ⚠ SİKLİK OLMAYAN ZEMİN. Sena'da ağrı artık regl haftasına
+           sığmıyor; aradaki günler de sabit bir seviyenin ALTINA
+           inmiyor. Zemini toplarsam tepe 10'a dayanıp kırpılıyor ve
+           döngü eğrisi düzleşiyor — TABAN olarak uygulanıyor. */
         const zemin = opt.baseline || 0;
         const agri = Math.max(0, Math.min(10,
-          Math.round(taban + zemin + R.bt(-1.1, 1.1))));
+          Math.round(Math.max(taban, zemin) + R.bt(-1.1, 1.1))));
         const yorgun = Math.max(0, Math.min(10,
           Math.round(agri * 0.7 + 2 + R.bt(-1.4, 1.4))));
         const kanama = d === 1 ? "Heavy"
@@ -6337,18 +6341,18 @@ function DEMO(){
           helped:care,
           painMeds:agri >= 5 ? R.pick(["2x naproxen", "1x naproxen",
                                        "paracetamol", "mefenamic acid"]) : "",
-          missedDay:agri >= 8 || (agri >= 7 && R.chance(0.4)),
+          missedDay:agri >= 8 || (agri >= 7 && R.chance(0.3)),
           note:"", notes:""});
       }
       dongu++;
     }
   };
 
-  /* Derya: düzenli döngü, ameliyat+coil sonrası belirgin düşüş. */
-  kur(people[0], 16, {cycle:28, spread:1.6, dropAfter:-300, dropTo:0.45,
-                      spotting:true, baseline:0});
   /* Sena: düzensiz döngü, döngüden bağımsız zemin ağrı — tanısı yok. */
-  kur(people[1], 13, {cycle:31, spread:6.5, baseline:2.6, spotting:false});
+  kur(people[0], 13, {cycle:31, spread:6.5, baseline:4.6, spotting:false});
+  /* Derya: düzenli döngü, ameliyat+coil sonrası belirgin düşüş. */
+  kur(people[1], 16, {cycle:28, spread:1.6, dropAfter:-300, dropTo:0.45,
+                      spotting:true, baseline:0});
 
   /* ⚠ AÇIK KAYIT ŞANSA BIRAKILMAZ. `timeshift` bir yıl ileri sarıp açık
      iş arıyor; durum R.chance ile verilirse bazı tohumlarda sıfır çıkıyor
@@ -6364,7 +6368,7 @@ function DEMO(){
 
   return {
     set:Object.assign({}, DEFAULT_SET, {
-      company:"Onat · Bulut", address:"", city:"", phone:"", email:"",
+      company:"Bulut · Onat", address:"", city:"", phone:"", email:"",
       skin:"prairie",
       termsText:"A diary, not a diagnosis. Pain is laid over the cycle rather than the calendar, because that is where the pattern lives — and the days-lost count is the one a clinic and an employer both understand."
     }),
@@ -6553,8 +6557,8 @@ const V = {
     const pid = p0 ? p0.id : null;
     const ort = enAvg(l);
     const kotu = l.filter(r => n0(r.pain) >= 7).length;
-    const kayip = daysLost(from, to);
-    const kayip30 = daysLost(addDays(today(), -30), today());
+    const kayip = daysLost(from, to, pid);
+    const kayip30 = daysLost(addDays(today(), -30), today(), pid);
     const w = pid ? worstCycleDay(pid, from, to) : null;
     const nc = pid ? nonCyclicShare(pid, from, to) : null;
     const uzun = pid ? avgCycle(pid) : 0;
