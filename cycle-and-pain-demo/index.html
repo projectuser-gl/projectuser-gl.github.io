@@ -6168,7 +6168,7 @@ function nonCyclicShare(personId, from, to){
 }
 function heavyDays(list){ return list.filter(r =>
   r.flow === "Heavy" || r.flow === "Flooding").length; }
-function personName(id){ return nameOf("people", id); }
+function subjectName(id){ return nameOf("people", id); }
 function personRow(id){ return byId("people", id); }
 function num2(v){ return Math.round(n0(v) * 10) / 10; }
 
@@ -6468,7 +6468,7 @@ const V = {
     fee:() => 0,
     qty:r => n0(r.fatigue),
     qtyUnit:() => "fatigue",
-    label:r => personName(r.personId) + " — " + date(r.date),
+    label:r => subjectName(r.personId) + " — " + date(r.date),
     cardSub:r => { const d = cycleDayOf(r);
       return n0(r.pain) + "/10" + (d ? " · cycle day " + d : "") +
         (r.flow && r.flow !== "None" ? " · " + r.flow.toLowerCase() : ""); },
@@ -6525,7 +6525,7 @@ const V = {
          if (!d) return el("span", {class:"mut", text:"—"});
          return el("span", {class:"pill " + (r.periodStart ? "bad" : "mute") + " plain",
            text:"day " + d}); }},
-      {k:"personId", h:"Person", calc:r => personName(r.personId)},
+      {k:"personId", h:"Person", calc:r => subjectName(r.personId)},
       {k:"pain", h:"Pain", w:"96px", calc:r => n0(r.pain),
        render:r => { const b = enOf(r);
          return el("span", {class:"pill " + b.pill, text:n0(r.pain) + "/10"}); }},
@@ -6759,7 +6759,7 @@ V.entities.treatments = {
     {k:"name", h:"Treatment"},
     {k:"kind", h:"Type", w:"140px",
      render:t => el("span", {class:"sm mut", text:t.kind || "—"})},
-    {k:"personId", h:"Person", calc:t => personName(t.personId)},
+    {k:"personId", h:"Person", calc:t => subjectName(t.personId)},
     {k:"started", h:"From", type:"date", w:"104px"},
     /* ⚠ TEDAVİNİN GERÇEK ETKİSİ: başlamadan önceki 90 gün vs sonraki. */
     {k:"effect", h:"Pain before → since", calc:t => treatEffect(t).gain,
@@ -6790,7 +6790,7 @@ V.entities.visits = {
   ],
   cols:() => [
     {k:"date", h:"Date", type:"date", w:"104px"},
-    {k:"personId", h:"Person", calc:v => personName(v.personId)},
+    {k:"personId", h:"Person", calc:v => subjectName(v.personId)},
     {k:"who", h:"Seen by"},
     {k:"said", h:"Outcome"},
     {k:"nextDate", h:"Next", type:"date", w:"104px"}

@@ -6101,7 +6101,7 @@ function tiIn(from, to, tid){
 }
 function toolName(id){ return nameOf("tools", id); }
 function toolRow(id){ return byId("tools", id); }
-function personName(id){ return nameOf("people", id); }
+function subjectName(id){ return nameOf("people", id); }
 function liveTools(){ return rows("tools").filter(t => !t.gone); }
 
 function usesOf(tid){
@@ -6477,7 +6477,7 @@ const V = {
     fee:() => 0,
     qty:r => daysOut(r),
     qtyUnit:() => "days",
-    label:r => toolName(r.toolId) + (r.personId ? " → " + personName(r.personId) : ""),
+    label:r => toolName(r.toolId) + (r.personId ? " → " + subjectName(r.personId) : ""),
     cardSub:r => isLoan(r)
       ? (r.returnedOn ? "back after " + daysOut(r) + " days"
          : "out " + daysOut(r) + " days" +
@@ -6496,7 +6496,7 @@ const V = {
       const ls = loanStats();
       return [
         {k:"This one", v:isLoan(r)
-          ? personName(r.personId) + " · " +
+          ? subjectName(r.personId) + " · " +
             (r.returnedOn ? "back after " + daysOut(r) + " days"
              : "out " + daysOut(r) + " days" +
                (r.dueBack ? ", due back " + date(r.dueBack) : ""))
@@ -6566,7 +6566,7 @@ const V = {
       {k:"toolId", h:"Tool", calc:r => toolName(r.toolId)},
       {k:"personId", h:"Lent to", w:"160px",
        render:r => el("span", {class:"sm " + (r.personId ? "" : "mut"),
-         text:r.personId ? personName(r.personId) : "used at home"})},
+         text:r.personId ? subjectName(r.personId) : "used at home"})},
       {k:"what", h:"What for", w:"200px",
        render:r => el("span", {class:"sm mut", text:r.what || ""})},
       /* ⚠ İZLENEN SAYI SÜTUN OLARAK. */
@@ -6644,7 +6644,7 @@ const V = {
       {label:"Out Right Now", value:on.n ? money0(on.value) : "nothing",
        color:on.overdue ? "var(--bad)" : on.n ? "var(--c1)" : "var(--good)",
        note:on.n ? on.n + " tools with " +
-              (on.list[0] ? personName(on.list[0].personId) : "") +
+              (on.list[0] ? subjectName(on.list[0].personId) : "") +
               (on.overdue ? " and others · " + on.overdue + " past the date"
                           : " and others") : "everything is on the shelf"},
       {label:"Slowest Borrower", value:p.length && p[0].r.median !== null
@@ -6706,7 +6706,7 @@ const V = {
       const pr = personRecord(r.personId);
       out.push({kind:overdueBy(r) > 60 ? "bad" : "warn", icon:ICON.alert,
         text:toolName(r.toolId) + " is " + overdueBy(r) + " days past due with " +
-             personName(r.personId),
+             subjectName(r.personId),
         note:"Lent " + date(r.date) + (r.dueBack ? ", due back " + date(r.dueBack)
           : "") + (t && n0(t.cost) ? ", worth " + money0(t.cost) : "") + ". " +
              (pr && pr.n > 1 ? pr.returned + " of " + pr.n + " previous loans came " +

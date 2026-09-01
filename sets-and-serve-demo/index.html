@@ -6366,7 +6366,7 @@ function record(){
   const l = matches();
   const k = l.filter(won);
   return {n:l.length, won:k.length, lost:l.length - k.length,
-          pct:l.length ? 100 * k.length / l.length : 0,
+          pctOf:l.length ? 100 * k.length / l.length : 0,
           sets:l.reduce((a, r) => a + n0(r.setsWon), 0),
           setsLost:l.reduce((a, r) => a + n0(r.setsLost), 0)};
 }
@@ -6374,7 +6374,7 @@ function oppStats(oid){
   const l = matches(oid);
   if (!l.length) return null;
   const k = l.filter(won);
-  return {n:l.length, won:k.length, pct:100 * k.length / l.length,
+  return {n:l.length, won:k.length, pctOf:100 * k.length / l.length,
           rate:(function(){ const v = l.map(pointRate).filter(x => x !== null);
             return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
           })()};
@@ -6384,7 +6384,7 @@ function tnOpen(){
 }
 function num2(v){ return Math.round(n0(v) * 10) / 10; }
 function num3(v){ return Math.round(n0(v) * 100) / 100; }
-function pct(v){ return v === null ? "—" : Math.round(n0(v) * 100) + "%"; }
+function pctOf(v){ return v === null ? "—" : Math.round(n0(v) * 100) + "%"; }
 
 /* ── 41_demo.js ── */
 /* ═══ ÖRNEK VERİ — İKİ SEZON, KIRK MAÇ ═══════════════════════════════
@@ -6578,7 +6578,7 @@ const V = {
     qtyUnit:() => "points",
     label:r => oppName(r.oppId) + " — " + date(r.date),
     cardSub:r => (r.score || (won(r) ? "won" : "lost")) +
-      (firstIn(r) !== null ? " · " + pct(firstIn(r)) + " first serves in"
+      (firstIn(r) !== null ? " · " + pctOf(firstIn(r)) + " first serves in"
         : "") +
       (wue(r) !== null ? " · " + num3(wue(r)) + " winners to errors" : ""),
     blank:() => ({status:"logged", date:today(), won:true,
@@ -6602,19 +6602,19 @@ const V = {
         /* ⚠ ÜRÜNÜN BİRİNCİ SAYISI. */
         {k:"This match", v:(r.score || (won(r) ? "won" : "lost")) +
             " · " + pointsWon(r) + " of " + points(r) + " points, " +
-            pct(pointRate(r)),
+            pctOf(pointRate(r)),
          c:won(r) ? "var(--good)" : "var(--warn)"},
         {k:"The serve", v:firstIn(r) === null ? "record the serve counts"
-          : pct(firstIn(r)) + " of first serves in, winning " +
-            pct(firstWonPct(r)) + " of those and " + pct(secondWonPct(r)) +
+          : pctOf(firstIn(r)) + " of first serves in, winning " +
+            pctOf(firstWonPct(r)) + " of those and " + pctOf(secondWonPct(r)) +
             " behind the second · " + firstInBand(firstIn(r)).t,
          c:firstIn(r) === null ? "var(--muted)" : firstInBand(firstIn(r)).c},
         {k:"Where your peak is", v:!sf || sf.best === null
           ? "needs " + TN_BANDS.minMatches + " matches with a spread of " +
             "percentages"
-          : pct(sf.best) + " is where your own curve peaks · you serve at " +
-            pct(sf.now) + " and win " + pct(sf.nowE) +
-            " of service points there, against " + pct(sf.bestE) +
+          : pctOf(sf.best) + " is where your own curve peaks · you serve at " +
+            pctOf(sf.now) + " and win " + pctOf(sf.nowE) +
+            " of service points there, against " + pctOf(sf.bestE) +
             " at the peak",
          c:"var(--c4)"},
         {k:"What that is worth", v:!sf || sf.gain === null ? "—"
@@ -6635,13 +6635,13 @@ const V = {
         {k:"Winners and errors", v:wue(r) === null ? "—"
           : winners(r) + " winners to " + errors(r) + " unforced — " +
             num3(wue(r)) + " to one · " + wueBand(wue(r)).t +
-            (aggression(r) !== null ? " · " + pct(aggression(r)) +
+            (aggression(r) !== null ? " · " + pctOf(aggression(r)) +
               " of points ended on your racquet" : ""),
          c:wue(r) === null ? "var(--muted)" : wueBand(wue(r)).c},
         {k:"Does aggression pay", v:!af
           ? "needs " + TN_BANDS.minMatches + " matches"
-          : "across " + af.n + " matches, going from " + pct(af.low) +
-            " to " + pct(af.high) + " of points ended on your racquet is " +
+          : "across " + af.n + " matches, going from " + pctOf(af.low) +
+            " to " + pctOf(af.high) + " of points ended on your racquet is " +
             "worth " + num2(af.spread * 100) + " points in a hundred — " +
             (af.helps ? "so more aggression pays" : "so it costs") +
             (af.real ? ", and the slope clears its own error"
@@ -6650,8 +6650,8 @@ const V = {
         /* ⚠ ÜÇÜNCÜ SAYI. */
         {k:"Break points", v:!bs ? "needs five matches with break points"
           : bs.converted + " of " + bs.chances + " taken — " +
-            pct(bs.rate) + " against an ordinary return point rate of " +
-            pct(bs.base),
+            pctOf(bs.rate) + " against an ordinary return point rate of " +
+            pctOf(bs.base),
          c:"var(--muted)"},
         {k:"Is that clutch or noise", v:!bs ? "—"
           : bs.real
@@ -6664,14 +6664,14 @@ const V = {
                 " break points to call a gap this size" : ""),
          c:bs && bs.real ? "var(--warn)" : "var(--good)"},
         {k:"And the ones against you", v:!bs || bs.savedRate === null ? "—"
-          : bs.saved + " of " + bs.faced + " saved — " + pct(bs.savedRate) +
-            " against a service point rate of " + pct(bs.serveBase) + ", " +
+          : bs.saved + " of " + bs.faced + " saved — " + pctOf(bs.savedRate) +
+            " against a service point rate of " + pctOf(bs.serveBase) + ", " +
             (bs.savedReal ? "which is a real difference"
                           : "which is inside the noise"),
          c:bs && bs.savedReal ? "var(--warn)" : "var(--good)"},
         /* ⚠ DÖRDÜNCÜ SAYI. */
         {k:"Holding and breaking", v:!gs ? "—"
-          : pct(gs.hold) + " of service games held and " + pct(gs.brk) +
+          : pctOf(gs.hold) + " of service games held and " + pctOf(gs.brk) +
             " of return games broken across " + gs.n + " matches",
          c:"var(--muted)"},
         {k:"What decides your matches", v:!db ? "—"
@@ -6682,11 +6682,11 @@ const V = {
          c:"var(--c4)"},
         {k:"Surface", v:!su ? "—"
           : su.best.surface.toLowerCase() + " gives you " +
-            pct(su.best.rate) + " of points against " + pct(su.worst.rate) +
+            pctOf(su.best.rate) + " of points against " + pctOf(su.worst.rate) +
             " on " + su.worst.surface.toLowerCase(),
          c:"var(--muted)"},
         {k:"Record", v:!rec ? "—"
-          : rec.won + " and " + rec.lost + " — " + Math.round(rec.pct) +
+          : rec.won + " and " + rec.lost + " — " + Math.round(rec.pctOf) +
             "%" + (os ? " · " + os.won + "–" + (os.n - os.won) +
               " against " + oppName(r.oppId) : ""),
          c:"var(--c1)"}
@@ -6747,9 +6747,9 @@ const V = {
        render:r => { const f = firstIn(r);
          if (f === null) return el("span", {class:"mut", text:"—"});
          return el("span", {class:"sm"}, [
-           el("span", {class:"pill " + firstInBand(f).pill, text:pct(f)}),
-           el("span", {class:"mut", text:"  " + pct(firstWonPct(r)) +
-             " of them, " + pct(secondWonPct(r)) + " behind the second"})]); }},
+           el("span", {class:"pill " + firstInBand(f).pill, text:pctOf(f)}),
+           el("span", {class:"mut", text:"  " + pctOf(firstWonPct(r)) +
+             " of them, " + pctOf(secondWonPct(r)) + " behind the second"})]); }},
       {k:"wue", h:"Winners to errors", w:"180px",
        calc:r => wue(r) === null ? -1 : wue(r),
        render:r => { const w = wue(r);
@@ -6761,7 +6761,7 @@ const V = {
       {k:"points", h:"Points", w:"140px", calc:r => pointRate(r) || 0,
        render:r => el("span", {class:"sm"}, [
          el("span", {class:"mono", text:pointsWon(r) + "/" + points(r)}),
-         el("span", {class:"mut", text:"  " + pct(pointRate(r))})])},
+         el("span", {class:"mut", text:"  " + pctOf(pointRate(r))})])},
       {k:"venueId", h:"Surface", w:"130px",
        calc:r => { const v = venueRow(r.venueId); return v ? v.surface : ""; }}
     ]
@@ -6792,11 +6792,11 @@ const V = {
               "error, so it is a real trade rather than scatter. "
               : "a slope inside its own standard error at " + num2(sf.t) +
                 ", so treat the peak as a direction rather than a target. ") +
-            "Your second serve wins " + pct(sf.w2) +
+            "Your second serve wins " + pctOf(sf.w2) +
             " of its points, and the two together make a curve with a peak " +
-            "at " + pct(sf.best) + ". You currently serve at " +
-            pct(sf.now) + ", which is worth " + pct(sf.nowE) +
-            " of service points against " + pct(sf.bestE) + " at the peak — " +
+            "at " + pctOf(sf.best) + ". You currently serve at " +
+            pctOf(sf.now) + ", which is worth " + pctOf(sf.nowE) +
+            " of service points against " + pctOf(sf.bestE) + " at the peak — " +
             num2(sf.gain * 100) + " points in every hundred. " +
             "The published tour range is " + TN_BANDS.firstInRef[0] + " to " +
             TN_BANDS.firstInRef[1] + " per cent, and this is why: the " +
@@ -6818,10 +6818,10 @@ const V = {
     return [
       /* ⚠ AYIRT EDİCİ KART 1. */
       {label:"Where Your Serve Should Sit",
-       value:sf && sf.best !== null ? pct(sf.best) : "—",
+       value:sf && sf.best !== null ? pctOf(sf.best) : "—",
        color:"var(--c4)",
        note:sf && sf.best !== null
-              ? "you serve at " + pct(sf.now) + " · the peak of your own " +
+              ? "you serve at " + pctOf(sf.now) + " · the peak of your own " +
                 "curve, fitted on " + sf.n + " matches, against a published " +
                 "tour range of " + TN_BANDS.firstInRef[0] + " to " +
                 TN_BANDS.firstInRef[1] + "%"
@@ -6835,7 +6835,7 @@ const V = {
        color:!sf ? "var(--muted)" : sf.gain > 0.005 ? "var(--warn)"
          : "var(--good)",
        note:sf ? "points in every hundred service points · " +
-              pct(sf.nowE) + " where you serve against " + pct(sf.bestE) +
+              pctOf(sf.nowE) + " where you serve against " + pctOf(sf.bestE) +
               " at the peak"
       /* ⚠ EĞİM ORAN BİRİMİNDE: yüzde on = 0,10 × eğim, yüzde puana
          çevirmek için × 100 — toplamda × 10. Bir kez daha 100 ile
@@ -6851,8 +6851,8 @@ const V = {
       {label:"Does Aggression Pay",
        value:af ? num2(af.spread * 100) : "—",
        color:!af ? "var(--muted)" : af.helps ? "var(--good)" : "var(--warn)",
-       note:af ? "points in a hundred, going from " + pct(af.low) + " to " +
-              pct(af.high) + " of points ended on your racquet · " +
+       note:af ? "points in a hundred, going from " + pctOf(af.low) + " to " +
+              pctOf(af.high) + " of points ended on your racquet · " +
               (af.helps ? "more pays" : "more costs") +
               (af.real ? ", and the slope clears its error" : "")
             : "needs " + TN_BANDS.minMatches + " matches"},
@@ -6865,10 +6865,10 @@ const V = {
             : "—"},
       /* ⚠ AYIRT EDİCİ KART 3. */
       {label:"Break Points: Clutch or Noise",
-       value:bs ? pct(bs.rate) : "—",
+       value:bs ? pctOf(bs.rate) : "—",
        color:!bs ? "var(--muted)" : bs.real ? "var(--warn)" : "var(--good)",
        note:bs ? bs.converted + " of " + bs.chances + " against an ordinary " +
-              "return rate of " + pct(bs.base) + " — " +
+              "return rate of " + pctOf(bs.base) + " — " +
               (bs.real ? "a real difference at " + num2(bs.t) +
                 " standard errors"
                 : "inside the noise at " + num2(bs.t) + " standard errors")
@@ -6889,15 +6889,15 @@ const V = {
        note:db ? "in wins you hold " + num2(db.hold * 100) +
               " points more of your service games and break " +
               num2(db.brk * 100) + " more of theirs" +
-              (gs ? " · " + pct(gs.hold) + " held and " + pct(gs.brk) +
+              (gs ? " · " + pctOf(gs.hold) + " held and " + pctOf(gs.brk) +
                 " broken overall" : "")
             : "needs five matches with the game counts"},
       {label:"Record",
        value:rec ? rec.won + "–" + rec.lost : "—",
        color:"var(--c1)",
-       note:rec ? Math.round(rec.pct) + "% of " + rec.n + " matches" +
+       note:rec ? Math.round(rec.pctOf) + "% of " + rec.n + " matches" +
               (su ? " · best on " + su.best.surface.toLowerCase() + " at " +
-                pct(su.best.rate) + " of points" : "")
+                pctOf(su.best.rate) + " of points" : "")
             : "—"}
     ];
   },
@@ -6914,7 +6914,7 @@ const V = {
   counts:{
     matches:() => tnOpen().length,
     opponents:() => rows("opponents").filter(o => { const s = oppStats(o.id);
-      return s && s.n >= 2 && s.pct < 50; }).length,
+      return s && s.n >= 2 && s.pctOf < 50; }).length,
     racquets:() => 0
   },
   alerts:() => {
@@ -6923,15 +6923,15 @@ const V = {
     const sf = serveFit();
     if (sf && sf.best !== null && Math.abs(sf.now - sf.best) > 0.03)
       out.push({kind:"warn", icon:ICON.chart,
-        text:"You serve at " + pct(sf.now) + " and your curve peaks at " +
-             pct(sf.best),
+        text:"You serve at " + pctOf(sf.now) + " and your curve peaks at " +
+             pctOf(sf.best),
         note:"Fitted across " + sf.n + " matches: every ten points of first " +
              "serve percentage costs " + num2(Math.abs(sf.slope) * 10) +
              " points of the rate you win those first serves, and your " +
-             "second serve wins " + pct(sf.w2) +
+             "second serve wins " + pctOf(sf.w2) +
              ". Put those together and the expected share of service " +
-             "points is a curve with a peak at " + pct(sf.best) + ", worth " +
-             pct(sf.bestE) + " against " + pct(sf.nowE) + " where you serve " +
+             "points is a curve with a peak at " + pctOf(sf.best) + ", worth " +
+             pctOf(sf.bestE) + " against " + pctOf(sf.nowE) + " where you serve " +
              "now — " + num2(sf.gain * 100) + " points in every hundred. " +
              (sf.real ? "The slope clears its own standard error, so the " +
                "trade-off is measured rather than assumed."
@@ -6941,8 +6941,8 @@ const V = {
     else if (sf && sf.best !== null)
       out.push({kind:"good", icon:ICON.chart,
         text:"Your first serve percentage is about where it should be",
-        note:pct(sf.now) + " against a fitted peak of " + pct(sf.best) +
-             ", worth " + pct(sf.nowE) + " of service points. The published " +
+        note:pctOf(sf.now) + " against a fitted peak of " + pctOf(sf.best) +
+             ", worth " + pctOf(sf.nowE) + " of service points. The published " +
              "tour range is " + TN_BANDS.firstInRef[0] + " to " +
              TN_BANDS.firstInRef[1] + " per cent and the reason it is not " +
              "higher is exactly this curve: a first serve you never miss is " +
@@ -6955,7 +6955,7 @@ const V = {
              num2(Math.abs(af.spread) * 100) + " points in a hundred",
         note:"Across " + af.n + " matches, the share of points that ended " +
              "on your racquet — winners plus unforced errors — has run " +
-             "from " + pct(af.low) + " to " + pct(af.high) + ", and over " +
+             "from " + pctOf(af.low) + " to " + pctOf(af.high) + ", and over " +
              "that range the point win rate falls by " +
              num2(Math.abs(af.spread) * 100) + " in a hundred. " +
              (af.real ? "The slope clears its own standard error. "
@@ -6968,8 +6968,8 @@ const V = {
       out.push({kind:"good", icon:ICON.load,
         text:"Going for it is worth " + num2(af.spread * 100) +
              " points in a hundred",
-        note:"Over the range you actually play — " + pct(af.low) + " to " +
-             pct(af.high) + " of points ending on your racquet — the point " +
+        note:"Over the range you actually play — " + pctOf(af.low) + " to " +
+             pctOf(af.high) + " of points ending on your racquet — the point " +
              "win rate rises by that much. " + (af.ratio !== null
                ? "Your winners to errors ratio is " + num3(af.ratio) + ", " +
                  wueBand(af.ratio).t + ". " : "") +
@@ -6982,8 +6982,8 @@ const V = {
       out.push({kind:"good", icon:ICON.doc,
         text:"Your break point record is not telling you anything",
         note:bs.converted + " of " + bs.chances + " taken, which is " +
-             pct(bs.rate) + " against an ordinary return point rate of " +
-             pct(bs.base) + ". The difference is " + num2(bs.t) +
+             pctOf(bs.rate) + " against an ordinary return point rate of " +
+             pctOf(bs.base) + ". The difference is " + num2(bs.t) +
              " times the binomial standard error, and anything under about " +
              "two is what the same coin looks like flipped twice. " +
              (bs.need && bs.need < 2000 ? "Telling a gap this size from " +
@@ -6996,8 +6996,8 @@ const V = {
       out.push({kind:"warn", icon:ICON.doc,
         text:"Break points really do go " +
              (bs.gap < 0 ? "against" : "for") + " you",
-        note:pct(bs.rate) + " converted against an ordinary return rate of " +
-             pct(bs.base) + " across " + bs.chances + " break points — " +
+        note:pctOf(bs.rate) + " converted against an ordinary return rate of " +
+             pctOf(bs.base) + " across " + bs.chances + " break points — " +
              num2(bs.t) + " times the binomial standard error, which is " +
              "past the line. That is unusual: with samples this size the " +
              "answer is normally noise, so it is worth watching whether it " +
@@ -7005,8 +7005,8 @@ const V = {
     if (bs && bs.savedReal)
       out.push({kind:"warn", icon:ICON.chart,
         text:"Break points against you go differently too",
-        note:bs.saved + " of " + bs.faced + " saved — " + pct(bs.savedRate) +
-             " against a service point rate of " + pct(bs.serveBase) +
+        note:bs.saved + " of " + bs.faced + " saved — " + pctOf(bs.savedRate) +
+             " against a service point rate of " + pctOf(bs.serveBase) +
              ", which is " + num2(bs.savedT) + " standard errors away. " +
              "Serving at break point is the one situation where the tactical " +
              "picture genuinely changes — the returner steps in — so unlike " +
@@ -7018,9 +7018,9 @@ const V = {
       out.push({kind:"good", icon:ICON.home,
         text:"Your matches are decided in " + db.driver,
         note:"In the " + gs.wonN + " you won you held " +
-             pct(gs.holdWon) + " of your service games and broke " +
-             pct(gs.brkWon) + " of theirs; in the " + gs.lostN +
-             " you lost, " + pct(gs.holdLost) + " and " + pct(gs.brkLost) +
+             pctOf(gs.holdWon) + " of your service games and broke " +
+             pctOf(gs.brkWon) + " of theirs; in the " + gs.lostN +
+             " you lost, " + pctOf(gs.holdLost) + " and " + pctOf(gs.brkLost) +
              ". The swing on the return side is " +
              num2(Math.abs(db.brk) * 100) + " points against " +
              num2(Math.abs(db.hold) * 100) + " on serve" +
@@ -7036,9 +7036,9 @@ const V = {
         text:su.best.surface + " is worth " +
              num2((su.best.rate - su.worst.rate) * 100) +
              " points in a hundred",
-        note:pct(su.best.rate) + " of points on " +
+        note:pctOf(su.best.rate) + " of points on " +
              su.best.surface.toLowerCase() + " across " + su.best.n +
-             " matches against " + pct(su.worst.rate) + " on " +
+             " matches against " + pctOf(su.worst.rate) + " on " +
              su.worst.surface.toLowerCase() + " across " + su.worst.n +
              ". Point win rate is the right measure here rather than " +
              "results, because a couple of tight losses on one surface can " +
@@ -7073,7 +7073,7 @@ V.entities.opponents = {
        if (!s) return el("span", {class:"mut", text:"—"});
        return el("span", {class:"sm"}, [
          el("span", {class:"mono", text:s.won + "–" + (s.n - s.won)}),
-         el("span", {class:"mut", text:"  " + Math.round(s.pct) + "%"})]); }},
+         el("span", {class:"mut", text:"  " + Math.round(s.pctOf) + "%"})]); }},
     /* ⚠ EN ÖNEMLİ SÜTUN: PUAN ORANI — sonuçtan daha çok şey söyler. */
     {k:"rate", h:"Points won against them", w:"210px",
      calc:o => { const s = oppStats(o.id);
@@ -7083,7 +7083,7 @@ V.entities.opponents = {
        return el("span", {class:"sm"}, [
          el("span", {class:"pill " + (s.rate >= 0.52 ? "good"
              : s.rate >= 0.48 ? "acc" : "warn"),
-           text:pct(s.rate)}),
+           text:pctOf(s.rate)}),
          el("span", {class:"mut", text:"  a coin toss is 50"})]); }},
     {k:"style", h:"Style"}
   ],
@@ -7123,8 +7123,8 @@ V.entities.venues = {
        const s = l.reduce((a, r) => a + servePointRate(r), 0) / l.length;
        const t = l.reduce((a, r) => a + returnPointRate(r), 0) / l.length;
        return el("span", {class:"sm"}, [
-         el("span", {class:"mono", text:pct(s) + " on serve"}),
-         el("span", {class:"mut", text:"  " + pct(t) + " on return"})]); }},
+         el("span", {class:"mono", text:pctOf(s) + " on serve"}),
+         el("span", {class:"mut", text:"  " + pctOf(t) + " on return"})]); }},
     {k:"where", h:"Where"}
   ],
   blank:() => ({surface:"Hard", indoor:false})
@@ -7162,8 +7162,8 @@ V.entities.racquets = {
        return el("span", {class:"sm"}, [
          el("span", {class:"pill " + wueBand(s.wue).pill,
            text:num3(s.wue) + " to one"}),
-         el("span", {class:"mut", text:"  " + pct(s.winners) +
-           " winners, " + pct(s.errors) + " errors, of points"})]); }},
+         el("span", {class:"mut", text:"  " + pctOf(s.winners) +
+           " winners, " + pctOf(s.errors) + " errors, of points"})]); }},
     {k:"strung", h:"Strung", type:"date", w:"110px"}
   ],
   blank:() => ({tension:52, strung:today()})

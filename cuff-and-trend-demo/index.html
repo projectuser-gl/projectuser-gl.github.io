@@ -6140,7 +6140,7 @@ function daysCovered(from, to, personId){
   const s = new Set(bpIn(from, to, personId).map(r => r.date));
   return s.size;
 }
-function personName(id){ return nameOf("people", id); }
+function subjectName(id){ return nameOf("people", id); }
 function personRow(id){ return byId("people", id); }
 function medsFor(id){
   return rows("meds").filter(m => m.personId === id && !m.stopped);
@@ -6332,7 +6332,7 @@ const V = {
     fee:() => 0,
     qty:r => n0(r.pulse),
     qtyUnit:() => "bpm",
-    label:r => personName(r.personId) + " — " + (r.timeOfDay || "reading"),
+    label:r => subjectName(r.personId) + " — " + (r.timeOfDay || "reading"),
     cardSub:r => bpText(r) + " · " + bpOf(r).t + " · " + (r.arm || "") + " arm",
     blank:() => ({status:"logged", date:today(), timeOfDay:"Morning",
                   arm:"Left", position:"Sitting"}),
@@ -6383,7 +6383,7 @@ const V = {
       {k:"date", h:"Date", type:"date", w:"104px"},
       {k:"timeOfDay", h:"When", w:"88px",
        render:r => el("span", {class:"sm mut", text:r.timeOfDay || "—"})},
-      {k:"personId", h:"Person", calc:r => personName(r.personId)},
+      {k:"personId", h:"Person", calc:r => subjectName(r.personId)},
       {k:"reading", h:"Reading", calc:r => n0(r.sys),
        render:r => el("span", {class:"mono", style:{fontWeight:"600"}, text:bpText(r)})},
       {k:"band", h:"Band", w:"112px", calc:r => bpOf(r).t,
@@ -6572,7 +6572,7 @@ V.entities.meds = {
   cols:() => [
     {k:"name", h:"Medicine"},
     {k:"dose", h:"Dose", w:"90px"},
-    {k:"personId", h:"Person", calc:m => personName(m.personId)},
+    {k:"personId", h:"Person", calc:m => subjectName(m.personId)},
     {k:"whenTaken", h:"Taken"},
     {k:"started", h:"Started", type:"date", w:"104px"},
     {k:"status", h:"Status", w:"96px", calc:m => m.stopped ? "Stopped" : "Current",

@@ -6270,7 +6270,7 @@ function checksPerDay(personId, from, to){
   return g ? l.length / g : 0;
 }
 function deviceOf(id){ return nameOf("devices", id); }
-function personName(id){ return nameOf("people", id); }
+function subjectName(id){ return nameOf("people", id); }
 function personRow(id){ return byId("people", id); }
 function num2(v){ return Math.round(n0(v) * 10) / 10; }
 function bp(r){ return n0(r.sys) + "/" + n0(r.dia); }
@@ -6501,7 +6501,7 @@ const V = {
     fee:() => 0,
     qty:r => n0(r.pulse),
     qtyUnit:() => "bpm",
-    label:r => personName(r.personId) + " — " + date(r.date) + " " + (r.time || ""),
+    label:r => subjectName(r.personId) + " — " + date(r.date) + " " + (r.time || ""),
     cardSub:r => "score " + news2(r).total + " · " + bp(r) + " · " +
       n0(r.spo2) + "% · " + n0(r.pulse) + " bpm",
     blank:() => ({status:"logged", date:today(), time:"08:00",
@@ -6569,7 +6569,7 @@ const V = {
       {k:"date", h:"Date", type:"date", w:"104px"},
       {k:"time", h:"Time", w:"74px",
        render:r => el("span", {class:"mono sm", text:r.time || "—"})},
-      {k:"personId", h:"Person", calc:r => personName(r.personId)},
+      {k:"personId", h:"Person", calc:r => subjectName(r.personId)},
       /* ⚠ ÜRÜNÜN BİRİNCİ SAYISI SÜTUN OLARAK. */
       {k:"newsScore", h:"Score", w:"150px", calc:r => news2(r).total,
        render:r => { const n = news2(r), b = newsBand(n);
@@ -6848,7 +6848,7 @@ V.entities.episodes = {
   cols:() => [
     {k:"from", h:"From", type:"date", w:"104px"},
     {k:"title", h:"What it was"},
-    {k:"personId", h:"Person", calc:e => personName(e.personId)},
+    {k:"personId", h:"Person", calc:e => subjectName(e.personId)},
     {k:"days", h:"Length", w:"110px",
      calc:e => daysBetween(e.from, e.to || today()),
      render:e => { const g = daysBetween(e.from, e.to || today());
@@ -6889,7 +6889,7 @@ V.entities.devices = {
     {k:"name", h:"Device"},
     {k:"kind", h:"Measures", w:"160px",
      render:d => el("span", {class:"pill mute plain", text:d.kind || "—"})},
-    {k:"personId", h:"Person", calc:d => personName(d.personId)},
+    {k:"personId", h:"Person", calc:d => subjectName(d.personId)},
     {k:"validated", h:"Validated", w:"120px",
      render:d => d.validated ? el("span", {class:"pill good", text:"yes"})
                              : el("span", {class:"pill warn", text:"not validated"})},
@@ -6922,7 +6922,7 @@ V.entities.visits = {
   ],
   cols:() => [
     {k:"date", h:"Date", type:"date", w:"104px"},
-    {k:"personId", h:"Person", calc:v => personName(v.personId)},
+    {k:"personId", h:"Person", calc:v => subjectName(v.personId)},
     {k:"who", h:"Who"},
     {k:"said", h:"Outcome"},
     {k:"nextDate", h:"Next", type:"date", w:"104px"}

@@ -6271,7 +6271,7 @@ function sideRank(from, to, personId){
       .forEach(s => c[s] = (c[s] || 0) + 1));
   return Object.keys(c).map(k => ({k:k, v:c[k]})).sort((a, b) => b.v - a.v);
 }
-function personName(id){ return nameOf("people", id); }
+function subjectName(id){ return nameOf("people", id); }
 function personRow(id){ return byId("people", id); }
 function num2(v){ return Math.round(n0(v) * 10) / 10; }
 function kg(v){ return num2(v) + " kg"; }
@@ -6512,7 +6512,7 @@ const V = {
     fee:() => 0,
     qty:r => n0(r.protein),
     qtyUnit:() => "g protein",
-    label:r => personName(r.personId) + " — " + date(r.date),
+    label:r => subjectName(r.personId) + " — " + date(r.date),
     cardSub:r => (n0(r.weight) ? kg(r.weight) + " · " : "") +
       n0(r.protein) + " g protein" +
       (n0(r.side) >= 5 ? " · side effects " + n0(r.side) : ""),
@@ -6571,7 +6571,7 @@ const V = {
 
     cols:() => [
       {k:"date", h:"Date", type:"date", w:"104px"},
-      {k:"personId", h:"Person", calc:r => personName(r.personId)},
+      {k:"personId", h:"Person", calc:r => subjectName(r.personId)},
       {k:"weight", h:"Weight", w:"110px", calc:r => n0(r.weight),
        render:r => el("span", {class:"mono sm", text:n0(r.weight) ? kg(r.weight) : "—"})},
       {k:"protein", h:"Protein", w:"130px", calc:r => n0(r.protein),
@@ -6839,7 +6839,7 @@ V.entities.doses = {
   ],
   cols:() => [
     {k:"date", h:"Date", type:"date", w:"104px"},
-    {k:"personId", h:"Person", calc:d => personName(d.personId)},
+    {k:"personId", h:"Person", calc:d => subjectName(d.personId)},
     {k:"mg", h:"Dose", w:"110px", calc:d => n0(d.mg),
      render:d => el("span", {class:"mono sm", text:n0(d.mg) + " mg"})},
     /* ⚠ ARTIŞ MI, AYNI MI — yan etki eğrisi bu sütuna dayanıyor. */
@@ -6881,7 +6881,7 @@ V.entities.measures = {
   ],
   cols:() => [
     {k:"date", h:"Date", type:"date", w:"104px"},
-    {k:"personId", h:"Person", calc:m => personName(m.personId)},
+    {k:"personId", h:"Person", calc:m => subjectName(m.personId)},
     {k:"waist", h:"Waist", w:"100px",
      render:m => el("span", {class:"mono sm", text:n0(m.waist) ? n0(m.waist) + " cm" : "—"})},
     {k:"change", h:"Waist change", w:"140px",
@@ -6914,7 +6914,7 @@ V.entities.visits = {
   ],
   cols:() => [
     {k:"date", h:"Date", type:"date", w:"104px"},
-    {k:"personId", h:"Person", calc:v => personName(v.personId)},
+    {k:"personId", h:"Person", calc:v => subjectName(v.personId)},
     {k:"who", h:"Seen by"},
     {k:"said", h:"Outcome"},
     {k:"nextDate", h:"Next", type:"date", w:"104px"}

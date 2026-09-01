@@ -6263,7 +6263,7 @@ function skipReasons(personId, from, to){
   });
   return Object.keys(c).map(k => ({k:k, v:c[k]})).sort((a, b) => b.v - a.v);
 }
-function personName(id){ return nameOf("people", id); }
+function subjectName(id){ return nameOf("people", id); }
 function personRow(id){ return byId("people", id); }
 function num2(v){ return Math.round(n0(v) * 10) / 10; }
 function deg(v){ return Math.round(n0(v)) + "°"; }
@@ -6540,7 +6540,7 @@ const V = {
     fee:() => 0,
     qty:r => n0(r.reps),
     qtyUnit:() => "reps",
-    label:r => personName(r.personId) + " — " + date(r.date),
+    label:r => subjectName(r.personId) + " — " + date(r.date),
     cardSub:r => n0(r.reps) + " reps · pain " + n0(r.painDuring) + "/10" +
       (r.skipped ? " · skipped part of it" : ""),
     blank:() => ({status:"logged", date:today(), painDuring:4, painNext:2,
@@ -6602,7 +6602,7 @@ const V = {
 
     cols:() => [
       {k:"date", h:"Date", type:"date", w:"104px"},
-      {k:"personId", h:"Person", calc:r => personName(r.personId)},
+      {k:"personId", h:"Person", calc:r => subjectName(r.personId)},
       {k:"reps", h:"Reps", w:"88px", calc:r => n0(r.reps),
        render:r => el("span", {class:"mono sm", text:String(n0(r.reps))})},
       {k:"minutes", h:"Minutes", w:"92px",
@@ -6883,7 +6883,7 @@ V.entities.exercises = {
     {k:"name", h:"Exercise"},
     {k:"kind", h:"Kind", w:"150px",
      render:e => el("span", {class:"pill mute plain", text:e.kind || "—"})},
-    {k:"personId", h:"Person", calc:e => personName(e.personId)},
+    {k:"personId", h:"Person", calc:e => subjectName(e.personId)},
     {k:"dose", h:"Prescribed", w:"170px",
      render:e => el("span", {class:"mono sm",
        text:n0(e.sets) + "×" + n0(e.reps) + " · " + n0(e.perWeek) + "/week"})},
@@ -6921,7 +6921,7 @@ V.entities.range = {
   ],
   cols:() => [
     {k:"date", h:"Date", type:"date", w:"104px"},
-    {k:"personId", h:"Person", calc:m => personName(m.personId)},
+    {k:"personId", h:"Person", calc:m => subjectName(m.personId)},
     {k:"joint", h:"Joint", w:"120px"},
     {k:"move", h:"Movement", w:"150px"},
     {k:"degrees", h:"Degrees", w:"110px", calc:m => n0(m.degrees),
@@ -6963,7 +6963,7 @@ V.entities.visits = {
   ],
   cols:() => [
     {k:"date", h:"Date", type:"date", w:"104px"},
-    {k:"personId", h:"Person", calc:v => personName(v.personId)},
+    {k:"personId", h:"Person", calc:v => subjectName(v.personId)},
     {k:"who", h:"Seen by"},
     {k:"said", h:"What changed"},
     {k:"nextDate", h:"Next", type:"date", w:"104px"}

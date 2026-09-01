@@ -1595,6 +1595,15 @@ const ICON = {
   alert:  _sv('<path d="M12 3.5 22 20H2z"/><path d="M12 10v4.5M12 17.5h.01"/>'),
   calendar:_sv('<rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 10h17M8.5 3v4M15.5 3v4"/>'),
   clock:  _sv('<circle cx="12" cy="12" r="8.8"/><path d="M12 6.8V12l3.6 2.2"/>'),
+  /* ⚠ AŞAĞIDAKİ DÖRDÜ SONRADAN EKLENDİ. ICON.cal 116 dikeyde,
+     ICON.user 55 dikeyde kullanılıyordu ve ICON içinde yoktu:
+     undefined dönüyor, gezinme satırı ile uyarı simgesiz çıkıyor ve
+     hiçbir test düşmüyordu. Sessiz eksik. build.py artık ICON'da
+     olmayan ada başvuruyu kapıda durduruyor. */
+  cal:    _sv('<rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 10h17M8.5 3v4M15.5 3v4"/><path d="M8 14h2M14 14h2M8 17.5h2"/>'),
+  user:   _sv('<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>'),
+  grid:   _sv('<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>'),
+  list:   _sv('<path d="M9 6.5h11M9 12h11M9 17.5h11"/><path d="M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01"/>'),
   route:  _sv('<circle cx="6" cy="18.5" r="2.6"/><circle cx="18" cy="5.5" r="2.6"/><path d="M18 8.1v3.4a4 4 0 0 1-4 4h-4a4 4 0 0 0-4 .4"/>')
 };
 
@@ -6094,7 +6103,7 @@ function songsAll(){ return rows("songs"); }
 function peopleAll(){ return rows("people"); }
 function songOf(w){ return byId("songs", w && w.songId); }
 function songTitle(id){ const s = byId("songs", id); return s ? s.title : "—"; }
-function personName(id){ const p = byId("people", id); return p ? p.name : "—"; }
+function subjectName(id){ const p = byId("people", id); return p ? p.name : "—"; }
 function wMin(w){ return n0(w && w.minutes); }
 function songSec(s){ return n0(s && s.seconds); }
 
@@ -6144,7 +6153,7 @@ function songHours(id){
 }
 
 /* ── ① HUNİ: FİKİRDEN KAYITLI ESERE ───────────────────────────────── */
-function funnel(){
+function swFunnel(){
   return memo("swFunnel", () => {
     const ss = songsAll();
     if (!ss.length) return null;
@@ -6529,7 +6538,7 @@ const V = {
     rateHead:"Stage", wasteHead:"With",
     goodRate:0, badRate:240,
     sub:"Which song, how far it got that day, and who was in the room",
-    newHint:"Record the stage the session actually reached. That one field is what turns a pile of sessions into a funnel, and the funnel is the only thing that says where your songs die",
+    newHint:"Record the stage the session actually reached. That one field is what turns a pile of sessions into a swFunnel, and the swFunnel is the only thing that says where your songs die",
     emptyText:"Log sessions against songs with the stage each one reached. Ideas, drafts, demos and finished songs are four different things.",
 
     stages:[
@@ -6549,13 +6558,13 @@ const V = {
     qtyUnit:() => "sessions",
     label:w => songTitle(w.songId) + " · " + (w.stage || ""),
     cardSub:w => num0(wMin(w)) + " min · " + (w.stage || "") +
-      (w.withId ? " with " + personName(w.withId) : "") +
+      (w.withId ? " with " + subjectName(w.withId) : "") +
       (w.where ? " · " + w.where.toLowerCase() : ""),
     blank:() => ({status:"worked", date:today(), minutes:75,
                   stage:"Draft"}),
 
     summary:w => {
-      const fn = funnel();
+      const fn = swFunnel();
       const hs = hoursStats();
       const ls = lengthStats2();
       const cs = coStats();
@@ -6567,7 +6576,7 @@ const V = {
         {k:"This session", v:!s ? "—"
           : s.title + " · " + num0(wMin(w)) + " minutes, reached " +
             (w.stage || "—") +
-            (w.withId ? " with " + personName(w.withId) : " alone"),
+            (w.withId ? " with " + subjectName(w.withId) : " alone"),
          c:"var(--c1)"},
         {k:"This song", v:!st ? "—"
           : st.stage + (st.stalled ? ", stalled" : "") + " · " +
@@ -6581,7 +6590,7 @@ const V = {
             Math.round(fn.worst.rate) + "% get through and " +
             fn.worst.lost + " do not — " + convBand(fn.worst.rate).t,
          c:fn ? convBand(fn.worst.rate).c : "var(--muted)"},
-        {k:"The funnel", v:!fn ? "—"
+        {k:"The swFunnel", v:!fn ? "—"
           : fn.steps.map(x => x.n + " " + x.stage.toLowerCase())
               .join(" → ") + " · " + Math.round(fn.toFinish) +
             "% of ideas reach finished",
@@ -6708,17 +6717,17 @@ const V = {
        calc:w => wMin(w),
        render:w => el("span", {class:"mono sm", text:num0(wMin(w))})},
       {k:"withId", h:"In the room", w:"180px",
-       calc:w => personName(w.withId),
+       calc:w => subjectName(w.withId),
        render:w => el("span", {class:"sm"}, [
          el("span", {class:"pill " + (w.withId ? "acc" : "mute plain"),
-           text:w.withId ? personName(w.withId) : "alone"}),
+           text:w.withId ? subjectName(w.withId) : "alone"}),
          el("span", {class:"mut", text:w.where ? "  " + w.where : ""})])}
     ]
   },
 
   /* ⚠ ÜRÜNE ÖZGÜ PANEL: HUNİ. */
   dashPanel:st => {
-    const fn = funnel();
+    const fn = swFunnel();
     if (!fn) return null;
     return el("div", {class:"panel chart grow"}, [
       el("div", {class:"panel-head"}, [
@@ -6753,7 +6762,7 @@ const V = {
   },
 
   kpis:st => {
-    const fn = funnel();
+    const fn = swFunnel();
     const hs = hoursStats();
     const ls = lengthStats2();
     const cs = coStats();
@@ -6846,14 +6855,14 @@ const V = {
   ],
   counts:{
     works:() => swOpen().length,
-    songs:() => { const f = funnel();
+    songs:() => { const f = swFunnel();
       return f ? f.unregistered.length : 0; },
     people:() => { const c = coStats(); return c ? c.bad : 0; }
   },
   alerts:() => {
     const out = [];
     /* ⚠ ÜRÜNÜN BİRİNCİ SAYISI. */
-    const fn = funnel();
+    const fn = swFunnel();
     if (fn)
       out.push({kind:fn.worst.rate < 40 ? "warn" : "info",
         icon:ICON.chart,

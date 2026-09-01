@@ -6177,7 +6177,7 @@ function reliefEffect(from, to, personId){
   return out;
 }
 function goodDays(list){ return list.filter(r => n0(r.score) <= 3).length; }
-function personName(id){ return nameOf("people", id); }
+function subjectName(id){ return nameOf("people", id); }
 function personRow(id){ return byId("people", id); }
 function num2(v){ return Math.round(n0(v) * 10) / 10; }
 
@@ -6396,7 +6396,7 @@ const V = {
     fee:() => 0,
     qty:r => n0(r.sleepHrs),
     qtyUnit:() => "hrs sleep",
-    label:r => personName(r.personId) + " — " + date(r.date),
+    label:r => subjectName(r.personId) + " — " + date(r.date),
     cardSub:r => n0(r.score) + "/10 · " + painOf(r).t +
       (r.site ? " · " + r.site : ""),
     blank:() => ({status:"logged", date:today(), score:4, sleepHrs:7}),
@@ -6451,7 +6451,7 @@ const V = {
 
     cols:() => [
       {k:"date", h:"Date", type:"date", w:"104px"},
-      {k:"personId", h:"Person", calc:r => personName(r.personId)},
+      {k:"personId", h:"Person", calc:r => subjectName(r.personId)},
       {k:"score", h:"Score", w:"92px", calc:r => n0(r.score),
        render:r => { const b = painOf(r);
          return el("span", {class:"pill " + b.pill, text:n0(r.score) + "/10"}); }},
@@ -6632,7 +6632,7 @@ V.entities.meds = {
     {k:"dose", h:"Dose", w:"130px"},
     {k:"kind", h:"Type", w:"130px",
      render:m => el("span", {class:"pill mute plain", text:m.kind || "—"})},
-    {k:"personId", h:"Person", calc:m => personName(m.personId)},
+    {k:"personId", h:"Person", calc:m => subjectName(m.personId)},
     {k:"started", h:"Started", type:"date", w:"104px"},
     {k:"helped", h:"Verdict", w:"140px",
      render:m => { const v = m.helped || "";
@@ -6657,7 +6657,7 @@ V.entities.visits = {
   ],
   cols:() => [
     {k:"date", h:"Date", type:"date", w:"104px"},
-    {k:"personId", h:"Person", calc:v => personName(v.personId)},
+    {k:"personId", h:"Person", calc:v => subjectName(v.personId)},
     {k:"who", h:"Seen by"},
     {k:"next", h:"Next step"},
     {k:"nextDate", h:"Next", type:"date", w:"104px",

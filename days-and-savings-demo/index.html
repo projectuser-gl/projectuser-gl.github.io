@@ -6260,7 +6260,7 @@ function meetingsIn(personId, from, to){
   return rows("meetings").filter(m => (!personId || m.personId === personId) &&
     inRange(m.date, from, to));
 }
-function personName(id){ return nameOf("people", id); }
+function subjectName(id){ return nameOf("people", id); }
 function personRow(id){ return byId("people", id); }
 function num2(v){ return Math.round(n0(v) * 10) / 10; }
 
@@ -6525,7 +6525,7 @@ const V = {
     fee:() => 0,
     qty:r => n0(r.strength),
     qtyUnit:() => "strength",
-    label:r => personName(r.personId) + " — " + date(r.date) +
+    label:r => subjectName(r.personId) + " — " + date(r.date) +
       (r.situation ? " · " + r.situation.toLowerCase() : ""),
     cardSub:r => n0(r.strength) + "/10 · " + (r.outcome || "—") +
       (r.coping ? " · " + r.coping.toLowerCase() : ""),
@@ -6593,7 +6593,7 @@ const V = {
       {k:"date", h:"Date", type:"date", w:"104px"},
       {k:"time", h:"Time", w:"76px",
        render:r => el("span", {class:"mono sm", text:r.time || "—"})},
-      {k:"personId", h:"Person", calc:r => personName(r.personId)},
+      {k:"personId", h:"Person", calc:r => subjectName(r.personId)},
       {k:"strength", h:"Strength", w:"120px", calc:r => n0(r.strength),
        render:r => { const b = sbOf(r);
          return el("span", {class:"pill " + b.pill, text:n0(r.strength) + "/10"}); }},
@@ -6899,7 +6899,7 @@ V.entities.meetings = {
   ],
   cols:() => [
     {k:"date", h:"Date", type:"date", w:"104px"},
-    {k:"personId", h:"Person", calc:m => personName(m.personId)},
+    {k:"personId", h:"Person", calc:m => subjectName(m.personId)},
     {k:"kind", h:"Kind", w:"160px",
      render:m => el("span", {class:"pill mute plain", text:m.kind || "—"})},
     {k:"where", h:"Where"},
@@ -6931,7 +6931,7 @@ V.entities.wins = {
   ],
   cols:() => [
     {k:"date", h:"Date", type:"date", w:"104px"},
-    {k:"personId", h:"Person", calc:w => personName(w.personId)},
+    {k:"personId", h:"Person", calc:w => subjectName(w.personId)},
     {k:"title", h:"What it was"},
     {k:"kind", h:"Kind", w:"200px",
      render:w => el("span", {class:"pill mute plain", text:w.kind || "—"})},

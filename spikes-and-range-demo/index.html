@@ -6160,7 +6160,7 @@ function mealSpike(from, to, personId){
   });
   return out;
 }
-function personName(id){ return nameOf("people", id); }
+function subjectName(id){ return nameOf("people", id); }
 function personRow(id){ return byId("people", id); }
 function num2(v){ return Math.round(n0(v) * 10) / 10; }
 
@@ -6342,7 +6342,7 @@ const V = {
     fee:() => 0,
     qty:r => n0(r.carbs),
     qtyUnit:() => "g carbs",
-    label:r => personName(r.personId) + " — " + (r.whenTaken || "reading"),
+    label:r => subjectName(r.personId) + " — " + (r.whenTaken || "reading"),
     cardSub:r => bsShow(r) + " " + bsUnitLabel() + " · " + bsOf(r).t +
       (r.meal && r.meal !== "—" ? " · " + r.meal : ""),
     blank:() => ({status:"logged", date:today(), whenTaken:"Fasting", meal:"—"}),
@@ -6390,7 +6390,7 @@ const V = {
       {k:"date", h:"Date", type:"date", w:"104px"},
       {k:"time", h:"Time", w:"70px",
        render:r => el("span", {class:"mono sm", text:r.time || "—"})},
-      {k:"personId", h:"Person", calc:r => personName(r.personId)},
+      {k:"personId", h:"Person", calc:r => subjectName(r.personId)},
       {k:"mgdl", h:"Reading", calc:r => n0(r.mgdl),
        render:r => el("span", {class:"mono", style:{fontWeight:"600"},
          text:bsShow(r)})},
@@ -6573,7 +6573,7 @@ V.entities.meds = {
   cols:() => [
     {k:"name", h:"Medicine"},
     {k:"dose", h:"Dose", w:"100px"},
-    {k:"personId", h:"Person", calc:m => personName(m.personId)},
+    {k:"personId", h:"Person", calc:m => subjectName(m.personId)},
     {k:"whenTaken", h:"Taken"},
     {k:"started", h:"Started", type:"date", w:"104px"},
     {k:"status", h:"Status", w:"96px", calc:m => m.stopped ? "Stopped" : "Current",

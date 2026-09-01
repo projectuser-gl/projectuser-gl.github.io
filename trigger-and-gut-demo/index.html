@@ -6217,7 +6217,7 @@ function symptomRank(from, to, personId){
       .forEach(s => c[s] = (c[s] || 0) + 1));
   return Object.keys(c).map(k => ({k:k, v:c[k]})).sort((a, b) => b.v - a.v);
 }
-function personName(id){ return nameOf("people", id); }
+function subjectName(id){ return nameOf("people", id); }
 function num2(v){ return Math.round(n0(v) * 10) / 10; }
 function cap(s){ return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 
@@ -6482,7 +6482,7 @@ const V = {
     fee:() => 0,
     qty:r => n0(r.bloat),
     qtyUnit:() => "bloating",
-    label:r => personName(r.personId) + " — " + date(r.date),
+    label:r => subjectName(r.personId) + " — " + date(r.date),
     cardSub:r => n0(r.sx) + "/10 · " + (n0(r.bm) || 0) + " bm" +
       (n0(r.bristol) ? " · type " + n0(r.bristol) : "") +
       (r.urgent ? " · urgent" : ""),
@@ -6534,7 +6534,7 @@ const V = {
 
     cols:() => [
       {k:"date", h:"Date", type:"date", w:"104px"},
-      {k:"personId", h:"Person", calc:r => personName(r.personId)},
+      {k:"personId", h:"Person", calc:r => subjectName(r.personId)},
       {k:"sx", h:"Symptoms", w:"104px", calc:r => n0(r.sx),
        render:r => { const b = ibsOf(r);
          return el("span", {class:"pill " + b.pill, text:n0(r.sx) + "/10"}); }},
@@ -6791,7 +6791,7 @@ V.entities.challenges = {
   cols:() => [
     {k:"group", h:"Group"},
     {k:"food", h:"Test food"},
-    {k:"personId", h:"Person", calc:c => personName(c.personId)},
+    {k:"personId", h:"Person", calc:c => subjectName(c.personId)},
     {k:"started", h:"Day 1", type:"date", w:"104px"},
     /* ⚠ HÜKÜM KENDİ BAŞLANGIÇ SEVİYESİNE GÖRE — mutlak sayı hiçbir şey demiyor. */
     {k:"calc", h:"Baseline → challenge", calc:c => challengeVerdict(c).gain || 0,
@@ -6863,7 +6863,7 @@ V.entities.visits = {
   ],
   cols:() => [
     {k:"date", h:"Date", type:"date", w:"104px"},
-    {k:"personId", h:"Person", calc:v => personName(v.personId)},
+    {k:"personId", h:"Person", calc:v => subjectName(v.personId)},
     {k:"who", h:"Seen by"},
     {k:"said", h:"Outcome"},
     {k:"nextDate", h:"Next", type:"date", w:"104px"}

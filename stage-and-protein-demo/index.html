@@ -6240,7 +6240,7 @@ function dumpingDays(from, to, personId){
   return baIn(from, to, personId).filter(r =>
     String(r.problems || "").indexOf("Dumping") >= 0).length;
 }
-function personName(id){ return nameOf("people", id); }
+function subjectName(id){ return nameOf("people", id); }
 function personRow(id){ return byId("people", id); }
 function num2(v){ return Math.round(n0(v) * 10) / 10; }
 function kg(v){ return num2(v) + " kg"; }
@@ -6496,7 +6496,7 @@ const V = {
     fee:() => 0,
     qty:r => n0(r.fluid),
     qtyUnit:() => "mL fluid",
-    label:r => personName(r.personId) + " — " + date(r.date),
+    label:r => subjectName(r.personId) + " — " + date(r.date),
     cardSub:r => n0(r.protein) + " g · " + n0(r.fluid) + " mL" +
       (n0(r.weight) ? " · " + kg(r.weight) : ""),
     blank:() => ({status:"logged", date:today(), protein:70, fluid:1800,
@@ -6551,7 +6551,7 @@ const V = {
 
     cols:() => [
       {k:"date", h:"Date", type:"date", w:"104px"},
-      {k:"personId", h:"Person", calc:r => personName(r.personId)},
+      {k:"personId", h:"Person", calc:r => subjectName(r.personId)},
       {k:"protein", h:"Protein", w:"120px", calc:r => n0(r.protein),
        render:r => { const p = personRow(r.personId), h = proteinTarget(p);
          return el("span", {class:"pill " + (n0(r.protein) >= h ? "good"
@@ -6737,7 +6737,7 @@ const V = {
     rows("labs").filter(l => n0(l.low) && n0(l.value) < n0(l.low)).forEach(l => {
       if (daysBetween(l.date, today()) > 400) return;
       out.push({kind:"bad", icon:ICON.alert,
-        text:personName(l.personId) + " — " + l.kind + " low at " + n0(l.value) +
+        text:subjectName(l.personId) + " — " + l.kind + " low at " + n0(l.value) +
              " " + (l.unit || ""),
         note:"Range starts at " + n0(l.low) + ". Measured " + date(l.date) + ".",
         go:"labs"});
@@ -6829,7 +6829,7 @@ V.entities.milestones = {
   ],
   cols:() => [
     {k:"date", h:"Date", type:"date", w:"104px"},
-    {k:"personId", h:"Person", calc:m => personName(m.personId)},
+    {k:"personId", h:"Person", calc:m => subjectName(m.personId)},
     {k:"title", h:"What happened"},
     {k:"month", h:"Month after op", w:"140px",
      calc:m => { const p = personRow(m.personId);
@@ -6874,7 +6874,7 @@ V.entities.labs = {
   ],
   cols:() => [
     {k:"date", h:"Date", type:"date", w:"104px"},
-    {k:"personId", h:"Person", calc:l => personName(l.personId)},
+    {k:"personId", h:"Person", calc:l => subjectName(l.personId)},
     {k:"kind", h:"Test", w:"140px"},
     {k:"value", h:"Result", w:"150px", calc:l => n0(l.value),
      render:l => { const v = n0(l.value);
@@ -6903,7 +6903,7 @@ V.entities.visits = {
   ],
   cols:() => [
     {k:"date", h:"Date", type:"date", w:"104px"},
-    {k:"personId", h:"Person", calc:v => personName(v.personId)},
+    {k:"personId", h:"Person", calc:v => subjectName(v.personId)},
     {k:"who", h:"Seen by"},
     {k:"said", h:"Outcome"},
     {k:"nextDate", h:"Next", type:"date", w:"104px"}
