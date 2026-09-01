@@ -1595,6 +1595,15 @@ const ICON = {
   alert:  _sv('<path d="M12 3.5 22 20H2z"/><path d="M12 10v4.5M12 17.5h.01"/>'),
   calendar:_sv('<rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 10h17M8.5 3v4M15.5 3v4"/>'),
   clock:  _sv('<circle cx="12" cy="12" r="8.8"/><path d="M12 6.8V12l3.6 2.2"/>'),
+  /* ⚠ AŞAĞIDAKİ DÖRDÜ SONRADAN EKLENDİ. ICON.cal 116 dikeyde,
+     ICON.user 55 dikeyde kullanılıyordu ve ICON içinde yoktu:
+     undefined dönüyor, gezinme satırı ile uyarı simgesiz çıkıyor ve
+     hiçbir test düşmüyordu. Sessiz eksik. build.py artık ICON'da
+     olmayan ada başvuruyu kapıda durduruyor. */
+  cal:    _sv('<rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 10h17M8.5 3v4M15.5 3v4"/><path d="M8 14h2M14 14h2M8 17.5h2"/>'),
+  user:   _sv('<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>'),
+  grid:   _sv('<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>'),
+  list:   _sv('<path d="M9 6.5h11M9 12h11M9 17.5h11"/><path d="M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01"/>'),
   route:  _sv('<circle cx="6" cy="18.5" r="2.6"/><circle cx="18" cy="5.5" r="2.6"/><path d="M18 8.1v3.4a4 4 0 0 1-4 4h-4a4 4 0 0 0-4 .4"/>')
 };
 
@@ -7213,7 +7222,7 @@ V.entities.animals = {
 };
 
 V.entities.shears = {
-  noun:"Shearing day", title:"Shearing Days", icon:"cal",
+  noun:"Shearing day", title:"Shearing Days", icon:"calendar",
   sub:"One day, one shearer, the whole herd through the mat — the calendar is set by fibre length, not by the diary",
   fields:() => [
     {k:"tag", label:"Day", req:true},
