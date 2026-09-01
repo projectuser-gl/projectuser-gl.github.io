@@ -1595,6 +1595,15 @@ const ICON = {
   alert:  _sv('<path d="M12 3.5 22 20H2z"/><path d="M12 10v4.5M12 17.5h.01"/>'),
   calendar:_sv('<rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 10h17M8.5 3v4M15.5 3v4"/>'),
   clock:  _sv('<circle cx="12" cy="12" r="8.8"/><path d="M12 6.8V12l3.6 2.2"/>'),
+  /* ⚠ AŞAĞIDAKİ DÖRDÜ SONRADAN EKLENDİ. ICON.cal 116 dikeyde,
+     ICON.user 55 dikeyde kullanılıyordu ve ICON içinde yoktu:
+     undefined dönüyor, gezinme satırı ile uyarı simgesiz çıkıyor ve
+     hiçbir test düşmüyordu. Sessiz eksik. build.py artık ICON'da
+     olmayan ada başvuruyu kapıda durduruyor. */
+  cal:    _sv('<rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 10h17M8.5 3v4M15.5 3v4"/><path d="M8 14h2M14 14h2M8 17.5h2"/>'),
+  user:   _sv('<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>'),
+  grid:   _sv('<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>'),
+  list:   _sv('<path d="M9 6.5h11M9 12h11M9 17.5h11"/><path d="M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01"/>'),
   route:  _sv('<circle cx="6" cy="18.5" r="2.6"/><circle cx="18" cy="5.5" r="2.6"/><path d="M18 8.1v3.4a4 4 0 0 1-4 4h-4a4 4 0 0 0-4 .4"/>')
 };
 
@@ -3261,7 +3270,11 @@ function alerts(){
      V.subject = {entity, key, label}                 ← neyin kaydı
      V.streak  = {label, everyDays}                   ← seri/aralık kuralı  */
 
-function mVal(j){ return n0(j[(V.metric || {}).key]); }
+/* ⚠ İZLENEN SAYI HER ZAMAN BİR ALAN DEĞİL. Crohn'da asıl sayı beş
+   alandan HESAPLANAN Harvey-Bradshaw indeksi; kayıtta öyle bir alan yok.
+   `V.metric.calc` verilirse panel onu kullanıyor. */
+function metricVal(m, j){ return m && m.calc ? n0(m.calc(j)) : n0(j[(m || {}).key]); }
+function mVal(j){ return metricVal(V.metric, j); }
 function mFmt(v){ const m = V.metric || {};
   return m.fmt ? m.fmt(v) : (num2 ? num2(v) : Math.round(v * 10) / 10) +
     (m.unit ? " " + m.unit : ""); }
@@ -3271,14 +3284,14 @@ function logRows(st){ return jobsIn(st.from, today()); }
 function logTrend(st, h){
   const m = V.metric || {}; const ht = h || 230;
   const lab = st.months.map(monthLabel);
-  const avgBy = (fld) => st.months.map(mk => {
+  const avgBy = (mm) => st.months.map(mk => {
     const g = rows(V.job.key).filter(j => isRevenue(j) && monthKey(jobDate(j)) === mk);
     if (!g.length) return 0;
-    return g.reduce((a, j) => a + n0(j[fld]), 0) / g.length;
+    return g.reduce((a, j) => a + metricVal(mm, j), 0) / g.length;
   });
-  const s1 = avgBy(m.key);
+  const s1 = avgBy(m);
   const series = [{data:s1, color:"var(--c1)"}];
-  if (V.metric2) series.push({data:avgBy(V.metric2.key), color:"var(--c5)"});
+  if (V.metric2) series.push({data:avgBy(V.metric2), color:"var(--c5)"});
   const dot = c => el("i", {style:{width:"9px", height:"9px", borderRadius:"2px", background:c}});
   const legend = el("div", {class:"sm", style:{display:"flex", gap:"12px"}},
     [[m.label, "var(--c1)"]].concat(V.metric2 ? [[V.metric2.label, "var(--c5)"]] : [])
@@ -3439,7 +3452,14 @@ const LOGDASH = {
      attention, ranking, recentTable). Yeni kompozisyon eklemek widget
      yazmak değil, DİZİLİM yazmak.                                        */
 
-let DASH_RANGE = 90;
+/* ⚠ MEVSİMLİK ÜRÜNLERDE 90 GÜN YANLIŞ PENCERE. Kayak günlüğü eylülde
+   açıldığında son 90 günde tek gün yoktu ve pano boş görünüyordu — oysa
+   sezon şubatta doluydu. `V.periodDays` bildiren ürünler kendi doğal
+   dönemiyle açılıyor; kullanıcı yine de düğmeden değiştirebiliyor.   */
+let DASH_RANGE = null;
+function dashDays(){
+  return DASH_RANGE || n0((typeof V === "object" && V.periodDays) || 0) || 90;
+}
 
 function kpi(o){
   return el("div", {class:"kpi", style:{"--kc":o.color || "var(--accent)"}}, [
@@ -3645,11 +3665,19 @@ function statusPart(st, kind, size){
     body, false, "chart fixed grow");
 }
 function attention(){
-  const AL = alerts();
+  /* ⚠ İYİ HABER DE BİR UYARI KALEMİDİR. Kayıt ürünlerinde eşiğe
+     ULAŞMAK (nöbetsiz 365 gün, seri, remisyon) en önemli satır; ama
+     `good` kalemi sarı boyanınca kötü haber gibi duruyordu. Kırmızı
+     önce, sarı sonra, yeşil en altta. */
+  const AL = alerts().slice().sort((a, b) => {
+    const w = k => k === "bad" ? 0 : k === "good" ? 2 : 1;
+    return w(a.kind) - w(b.kind);
+  });
   return el("div", {class:"panel"}, [
     el("div", {class:"panel-head"}, [
       el("h2", {text:"Needs Attention"}), el("div", {class:"sp"}),
-      AL.length ? el("span", {class:"pill " + (AL.some(a => a.kind === "bad") ? "bad" : "warn"),
+      AL.length ? el("span", {class:"pill " + (AL.some(a => a.kind === "bad") ? "bad"
+        : AL.every(a => a.kind === "good") ? "good" : "warn"),
         text:AL.length + " item" + (AL.length > 1 ? "s" : "")}) : null
     ]),
     el("div", {class:"panel-body flush", style:{maxHeight:"330px", overflowY:"auto"}},
@@ -3658,7 +3686,8 @@ function attention(){
           padding:"10px 14px", borderBottom:"1px solid var(--hair2)", borderLeft:"0",
           background:"none"}, onclick:() => go(a.go)}, [
           el("span", {class:"ic", html:a.icon,
-            style:{color:"var(--" + (a.kind === "bad" ? "bad" : "warn") + ")"}}),
+            style:{color:"var(--" + (a.kind === "bad" ? "bad"
+              : a.kind === "good" ? "good" : "warn") + ")"}}),
           el("span", {class:"cell-2", style:{flex:"1"}}, [
             el("span", {class:"a", style:{fontSize:"12.5px"}, text:a.text}),
             el("span", {class:"b", text:a.note})])
@@ -3766,7 +3795,12 @@ function boardPreview(compact){
       style:{cursor:"pointer"}, onclick:() => editJob(j)}, [
       el("div", {class:"r1"}, [
         el("span", {class:"ref", text:jobRef(j) || "—"}),
-        el("span", {class:"amt", text:money0(jobValue(j))})]),
+        /* ⚠ KAYIT KİPİNDE PARA YOK. Ağrı skoru "$4" diye basılıyordu;
+           tahtada izlenen sayı para değil, V.metric'in kendisi. */
+        el("span", {class:"amt", text:V.noMoney
+          ? (typeof mFmt === "function" ? mFmt(typeof mVal === "function" ? mVal(j) : jobValue(j))
+                                        : String(jobValue(j)))
+          : money0(jobValue(j))})]),
       el("div", {class:"r2", text:jobLabel(j)}),
       el("div", {class:"r3"}, [el("span", {text:dateShort(jobStart(j))}),
         el("span", {text:"·"}), el("span", {text:jobCardSub(j)})])
@@ -4020,7 +4054,7 @@ const DASH = {
 
 
 function viewDashboard(){
-  const st = periodStats(DASH_RANGE);
+  const st = periodStats(dashDays());
   let cards = V.kpis(st);
   const view = el("div", {class:"stack"});
   view.appendChild(el("div", {style:{display:"flex", alignItems:"center", gap:"10px",
@@ -4028,7 +4062,7 @@ function viewDashboard(){
     el("div", {class:"sm mut", text:"Showing " + date(st.from) + " — " + date(today())}),
     el("div", {style:{flex:"1"}}),
     segControl([{v:30,t:"30 days"},{v:90,t:"90 days"},{v:180,t:"6 months"},{v:365,t:"12 months"}],
-      DASH_RANGE, v => { DASH_RANGE = v; render(); })
+      dashDays(), v => { DASH_RANGE = v; render(); })
   ]));
   /* ⚠ Bilinmeyen kompozisyon SESSİZCE `kpi`ye düşmez — o, tüm ürünleri
      aynı panoya geri döndüren şeyin ta kendisi. Konsola yazıp öyle düşüyor. */
