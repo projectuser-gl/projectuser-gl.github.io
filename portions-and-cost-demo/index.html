@@ -6432,9 +6432,14 @@ function wasteStats(a, b){
       labourLost:labourLost,
       cost:foodLost + packLost + labourLost,
       list:list, worst:list[0], best:list[list.length - 1],
+      /* ⚠ SAHTE ORAN ÜRETME: atlanan öğün sayısı fireden büyük
+         olduğu için "firenin %100'ü atlamalardan" diye tavanı
+         vuran bir sayı çıkıyordu. İki büyüklük ayrı ayrı
+         yazılır; atlamaların ne kadarının zamanında yakalandığı
+         bu defterden okunamaz. */
       skipMeals:skipMeals,
-      skipShare:waste > 0
-        ? Math.min(100, skipMeals / waste * 100) : null,
+      caught:skipMeals > 0
+        ? Math.max(0, (skipMeals - waste) / skipMeals * 100) : null,
       skips:ch ? ch.skips : 0};
   });
 }
@@ -6685,6 +6690,9 @@ function DEMO(){
       ["Accounting", 165, 0.09, "Bookkeeper"]
     ],
     variable:[
+      /* ⚠ MUTFAK EMEĞİ GİDER DEFTERİNDE YOKTU: net marj %37,3
+         çıktı, oysa hazır yemek işinde bant %10–20. */
+      ["Kitchen labour", 0.192, 0.04, "Cooks and packing"],
       ["Ingredients", 0.322, 0.08, "Food"],
       ["Packaging", 0.052, 0.1, "Trays, lids, sleeves"],
       ["Labels & inserts", 0.014, 0.12, "Labels and cards"],
@@ -6875,10 +6883,11 @@ const V = {
             " · " + money0(ws.cost) + " of food, packaging and time",
          c:ws ? wasteBand35(ws.rate).c : "var(--muted)"},
         {k:"Where it comes from", v:!ws ? "—"
-          : "skipped boxes account for about " +
-            pct(ws.skipShare, 0) + " of it: " +
-            num(ws.skipMeals, 0) + " meals were bought and cooked " +
-            "for weeks that were then skipped",
+          : num(ws.skipMeals, 0) + " meals were ordered for weeks " +
+            "that were then skipped, against " + num(ws.waste, 0) +
+            " portions actually wasted — so roughly " +
+            pct(ws.caught, 0) + " of the skips were caught before " +
+            "the food was cooked",
          c:"var(--bad)"},
         {k:"Left after food, packaging and labour",
          v:!mpDelivered(B) ? "—"
@@ -7060,8 +7069,10 @@ const V = {
               num(ws.made, 0) + " · " + money0(ws.foodLost) +
               " of food, " + money0(ws.packLost) +
               " of packaging and " + money0(ws.labourLost) +
-              " of cooking · about " + pct(ws.skipShare, 0) +
-              " of it was bought for weeks that were then skipped"
+              " of cooking · " + num(ws.skipMeals, 0) +
+              " meals were ordered for weeks that were skipped, so " +
+              "about " + pct(ws.caught, 0) +
+              " of the skips were caught in time"
             : "needs a recipe ledger"},
       {label:"Left After Everything", value:money0(st.profit),
        color:st.profit >= 0 ? "var(--good)" : "var(--bad)",
@@ -7207,11 +7218,14 @@ const V = {
         note:"Over-production in a subscription kitchen is not " +
              "carelessness, it is a timing problem: the food is " +
              "bought and the batches are planned from last week's " +
-             "numbers, and the skips arrive afterwards. About " +
-             pct(ws.skipShare, 0) + " of the waste here traces " +
-             "directly to skipped boxes — " + num(ws.skipMeals, 0) +
-             " meals bought for weeks that did not happen. The " +
-             "rest is forecasting. The bill splits into " +
+             "numbers, and the skips arrive afterwards. " +
+             num(ws.skipMeals, 0) +
+             " meals were ordered for weeks that were then skipped " +
+             "and " + num(ws.waste, 0) +
+             " portions were actually wasted, which means roughly " +
+             pct(ws.caught, 0) +
+             " of the skips were caught before the pans went on. " +
+             "The bill splits into " +
              money0(ws.foodLost) + " of food, " +
              money0(ws.packLost) + " of packaging and " +
              money0(ws.labourLost) +
