@@ -6477,10 +6477,10 @@ function DEMO(){
 
   /* ── TERAPİSTLER ── açık saat farklı. */
   const CSPEC = [
-    ["Dr. Renata Ellery", "PsyD",  26, 55, 0.90, 0.68],
-    ["Marcus Whitfield",  "LCSW",  26, 54, 0.82, 0.42],
-    ["Priya Raman",       "LPC",   20, 52, 0.71, 0.31],
-    ["Owen Baptiste",     "LMFT",  16, 50, 0.63, 0.22]
+    ["Dr. Renata Ellery", "PsyD",  22, 55, 0.90, 0.68],
+    ["Marcus Whitfield",  "LCSW",  22, 54, 0.82, 0.42],
+    ["Priya Raman",       "LPC",   17, 52, 0.71, 0.31],
+    ["Owen Baptiste",     "LMFT",  13, 50, 0.63, 0.22]
   ];
   const clinicians = CSPEC.map(c => ({id:id(), name:c[0],
     status:"active", credential:c[1], npi:"1" + R.int(200, 999) +
@@ -6494,7 +6494,12 @@ function DEMO(){
     const P = R.chance(0.86) ? R.pick(payers.slice(0, 4)) : payers[4];
     clients.push({id:id(), name:NAME_FIRST[i % NAME_FIRST.length] +
         " " + NAME_LAST[(i * 3 + 5) % NAME_LAST.length],
-      status:R.chance(0.82) ? "active" : "inactive",
+      /* ⚠ SESSİZE DÜŞEN DANIŞAN "inactive" DEĞİLDİR. Ayrılan herkesi
+         kapalı işaretlemek "45 gündür görülmedi" uyarısını hiç
+         tetiklemiyor — oysa kayıp danışan tam olarak defterde açık
+         görünüp gelmeyendir. Beşte biri açık bırakılıyor. */
+      status:R.chance(0.82) ? "active"
+        : R.chance(0.34) ? "active" : "inactive",
       presenting:R.pick(PRESENT), payerId:P.id,
       memberId:String(R.int(100000000, 999999999)),
       mode:R.chance(0.55) ? "office" : "tele",
@@ -6502,6 +6507,9 @@ function DEMO(){
       since:D(-R.int(30, 700)), notes:"",
       _clin:clinicians[i % clinicians.length],
       _every:R.chance(0.82) ? 7 : 14,
+      /* ⚠ AÇIK GÖRÜNÜP GELMEYEN DANIŞAN. Kayıp danışan defterde
+         kapanmaz; randevu yalnızca bir daha alınmaz. */
+      _quiet:R.chance(0.07),
       _reliab:R.bt(0.80, 0.99)});
   }
 
@@ -6513,7 +6521,8 @@ function DEMO(){
     const clin = c._clin;
     let g = -R.int(240, 400);
     if (c.status !== "active") g = -R.int(340, 400);
-    const bitis = c.status === "active" ? R.int(2, 9)
+    const bitis = c.status === "active"
+      ? (c._quiet ? -R.int(50, 150) : R.int(2, 9))
       : -R.int(60, 190);
     /* İlk seans değerlendirme. */
     let ilk = true;
@@ -6644,7 +6653,7 @@ function DEMO(){
   });
 
   clients.forEach(c => { delete c._clin; delete c._every;
-    delete c._reliab; });
+    delete c._reliab; delete c._quiet; });
   clinicians.forEach(c => { delete c._fill; delete c._long; });
   payers.forEach(p => { delete p._deny; });
   sessions.sort((a, b) => a.date < b.date ? -1 : 1);
