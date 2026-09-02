@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>User Guide — Offline Desktop Apps</title>
+<meta name="description" content="How to open your app, where your work is saved, how to connect a folder, and how to use the same app on two computers.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0e1013; --surface:#161a20; --surface2:#1c2129; --border:#272d37;
+    --text:#eef1f5; --muted:#98a2b1; --accent:#33c9a3; --accent-2:#5b8def;
+    --warn:#e0a33a; --bad:#e06a6a; --maxw:1160px; --r:14px;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f6f7f9; --surface:#ffffff; --surface2:#f0f2f5; --border:#e2e6ec;
+      --text:#141821; --muted:#5c6672; --accent:#128a70; --accent-2:#3564c9;
+      --warn:#a2700f; --bad:#b03a3a; }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:'Inter',system-ui,sans-serif;line-height:1.65;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  h1,h2,h3{font-family:'Sora',system-ui,sans-serif;line-height:1.15;text-wrap:balance;margin:0}
+  h1{font-size:clamp(2rem,4vw,2.9rem);letter-spacing:-.02em}
+  h2{font-size:1.5rem;margin:2.6rem 0 .9rem;scroll-margin-top:80px}
+  h3{font-size:1.08rem;margin:1.6rem 0 .5rem}
+  p{margin:.7rem 0}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+  .eyebrow{font-size:.76rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);
+    font-weight:600;font-family:'Sora',sans-serif}
+  header.hero{padding:64px 0 40px;border-bottom:1px solid var(--border)}
+  header.hero p.lede{font-size:1.12rem;color:var(--muted);max-width:62ch;margin-top:.9rem}
+  .layout{display:grid;grid-template-columns:236px 1fr;gap:52px;padding:36px 0 90px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:.9rem}
+  nav.toc ol{list-style:none;margin:0;padding:0;border-left:2px solid var(--border)}
+  nav.toc li a{display:block;padding:6px 0 6px 14px;color:var(--muted);border-left:2px solid transparent;margin-left:-2px}
+  nav.toc li a:hover{color:var(--text);border-left-color:var(--accent);text-decoration:none}
+  main{min-width:0;max-width:74ch}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+    padding:20px 22px;margin:18px 0}
+  .steps{counter-reset:s;list-style:none;padding:0;margin:18px 0}
+  .steps li{counter-increment:s;position:relative;padding:16px 0 16px 52px;
+    border-bottom:1px solid var(--border)}
+  .steps li:last-child{border-bottom:0}
+  .steps li::before{content:counter(s);position:absolute;left:0;top:16px;width:32px;height:32px;
+    border-radius:50%;display:grid;place-items:center;font-family:'Sora',sans-serif;
+    font-weight:600;font-size:.9rem;background:var(--surface2);color:var(--accent);
+    border:1px solid var(--border)}
+  /* Sadece adimin BASLIGI blok olmali. `b` genelinde display:block
+     yazinca govde metnindeki her kalin kelime alt satira dusuyordu. */
+  .steps li > b:first-child{display:block;font-weight:600;margin-bottom:2px}
+  .steps li b{font-weight:600}
+  .note{border-left:3px solid var(--accent);background:var(--surface);padding:14px 18px;
+    border-radius:0 var(--r) var(--r) 0;margin:18px 0}
+  .note.warn{border-left-color:var(--warn)}
+  .note.bad{border-left-color:var(--bad)}
+  .note b{font-family:'Sora',sans-serif}
+  code,kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;
+    background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:1px 6px}
+  .tablewrap{overflow-x:auto;margin:18px 0}
+  table{border-collapse:collapse;width:100%;font-size:.94rem;min-width:520px}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{font-family:'Sora',sans-serif;font-weight:600;font-size:.82rem;letter-spacing:.04em;
+    text-transform:uppercase;color:var(--muted)}
+  .yes{color:var(--accent);font-weight:600}
+  .no{color:var(--bad);font-weight:600}
+  .diagram{display:flex;gap:14px;flex-wrap:wrap;align-items:stretch;margin:20px 0}
+  .dbox{flex:1 1 170px;min-width:150px;background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--r);padding:16px;text-align:center}
+  .dbox.mid{border-color:var(--accent)}
+  .dbox b{display:block;font-family:'Sora',sans-serif;font-size:.98rem;margin-bottom:3px}
+  .dbox span{font-size:.85rem;color:var(--muted)}
+  .arrow{display:grid;place-items:center;color:var(--muted);font-size:1.3rem;flex:0 0 20px}
+  footer{border-top:1px solid var(--border);padding:30px 0 60px;color:var(--muted);font-size:.9rem}
+  @media (max-width:860px){
+    .layout{grid-template-columns:1fr;gap:0}
+    nav.toc{position:static;margin-bottom:24px}
+    .arrow{transform:rotate(90deg)}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">User Guide</div>
+  <h1>Your app, your computer, your file</h1>
+  <p class="lede">Everything you need for any of our offline desktop apps: how to open it, where your work is
+  kept, how to make sure you never lose it, and how to run the same app on two computers.</p>
+</div></header>
+
+<div class="wrap layout">
+<nav class="toc"><ol>
+  <li><a href="#start">1 · Getting started</a></li>
+  <li><a href="#inside">2 · What's in the download</a></li>
+  <li><a href="#open">3 · Opening it</a></li>
+  <li><a href="#first">4 · The first screen</a></li>
+  <li><a href="#where">5 · Where your work is kept</a></li>
+  <li><a href="#folder">6 · Connect a folder</a></li>
+  <li><a href="#two">7 · Two computers</a></li>
+  <li><a href="#safari">8 · Safari &amp; Firefox</a></li>
+  <li><a href="#using">9 · Everyday use</a></li>
+  <li><a href="#backup">10 · Backups &amp; moving</a></li>
+  <li><a href="#trouble">11 · Troubleshooting</a></li>
+  <li><a href="#faq">12 · FAQ</a></li>
+</ol></nav>
+
+<main>
+
+<h2 id="start">1 · Getting started in three steps</h2>
+<ol class="steps">
+  <li><b>Unzip the download</b>Right-click the ZIP and choose Extract All (Windows) or double-click it (Mac).
+    Keep the files together in one folder.</li>
+  <li><b>Double-click the HTML file</b>It opens in your web browser and runs from your own computer.
+    Nothing installs, no account is created, and no internet connection is needed.</li>
+  <li><b>Choose where to save</b>On the first screen, pick a folder. From then on every change you make is
+    written straight into a real file you can see, copy and back up.</li>
+</ol>
+<p>That is the whole setup. Everything below is detail for when you need it.</p>
+
+<h2 id="inside">2 · What's in the download</h2>
+<div class="tablewrap"><table>
+  <tr><th>File</th><th>What it is</th></tr>
+  <tr><td><code>Your App.html</code></td><td>The entire app in a single file. This is the one you open.</td></tr>
+  <tr><td><code>READ ME FIRST.txt</code></td><td>The short version of this page.</td></tr>
+  <tr><td><code>Start on Windows.bat</code></td><td>Optional launcher — double-click instead of the HTML file.</td></tr>
+  <tr><td><code>Start on Mac.command</code></td><td>The same, for macOS.</td></tr>
+  <tr><td><code>FONT LICENCE.txt</code></td><td>Licence text for the typefaces built into the app.</td></tr>
+</table></div>
+<p>The app is one file because that is what makes it yours: nothing to install, nothing to update,
+nothing that stops working when a subscription lapses. You can copy it to a USB stick and it still runs.</p>
+
+<h2 id="open">3 · Opening it</h2>
+<h3>Windows</h3>
+<p>Double-click the <code>.html</code> file. If Windows asks which program to use, choose Google Chrome or
+Microsoft Edge. You can also double-click <code>Start on Windows.bat</code>.</p>
+<h3>Mac</h3>
+<p>Double-click the <code>.html</code> file. To use Chrome or Edge instead of Safari — worth doing, see
+<a href="#folder">section 6</a> — right-click the file, choose <b>Open With</b>, and pick the browser you want.</p>
+<div class="note warn"><b>A macOS security warning on the .command file?</b><br>
+macOS blocks files downloaded from the internet the first time. You can ignore the warning entirely and open
+the <code>.html</code> file directly — it does exactly the same thing.</div>
+
+<h2 id="first">4 · The first screen</h2>
+<p>The first time you open the app it asks one question, and there are four answers:</p>
+<div class="tablewrap"><table>
+  <tr><th>Choice</th><th>Pick this when</th></tr>
+  <tr><td><b>Show me around with sample data</b></td><td>You have just bought it. A complete example business
+    is loaded so every screen is full and you can click through everything before typing anything real.
+    You can clear it whenever you like.</td></tr>
+  <tr><td><b>Start empty — this is my business</b></td><td>You are ready to enter your own work.</td></tr>
+  <tr><td><b>I've used this before — find my work</b></td><td>You are on a second computer, or you have
+    reinstalled. Point it at the folder you were saving to and everything comes back.</td></tr>
+  <tr><td><b>Restore from a backup file</b></td><td>You have a <code>.json</code> backup file and want to
+    load it.</td></tr>
+</table></div>
+<p>Sample data is not in your way: clear it any time from the <b>Backup &amp; Sync</b> screen and start clean.</p>
+
+<h2 id="where">5 · Where your work is kept</h2>
+<p>This matters more than anything else on this page, so it is worth thirty seconds.</p>
+<p>Until you connect a folder, the app keeps your work in the browser's own storage on that computer.
+That is fine and it survives closing the browser and restarting the machine — but it lives in one place only,
+and it is the same storage that gets wiped when someone clears browsing data.</p>
+<div class="note bad"><b>The one real risk</b><br>
+Clearing your browser's cookies and site data deletes the app's data along with it. No program can prevent
+that. Connecting a folder is what makes it a non-issue — after that your work is a normal file on your disk.</div>
+
+<h2 id="folder">6 · Connect a folder (do this once)</h2>
+<p>Open <b>Backup &amp; Sync</b> in the app and choose <b>Connect a folder</b>. Pick any folder you like —
+Documents, an external drive, a USB stick, or a cloud folder. From that moment on, every change you make is
+written into that folder within about a second. You do not press save, and you do not have to remember anything.</p>
+<p>It does <em>not</em> have to be a cloud folder. A plain folder on your own disk is a complete backup for
+one computer. Cloud only matters if you want <a href="#two">two computers</a>.</p>
+<div class="tablewrap"><table>
+  <tr><th>Browser</th><th>Everything else</th><th>Automatic saving to a folder</th></tr>
+  <tr><td>Chrome</td><td class="yes">Works</td><td class="yes">Works</td></tr>
+  <tr><td>Edge</td><td class="yes">Works</td><td class="yes">Works</td></tr>
+  <tr><td>Brave</td><td class="yes">Works</td><td class="yes">Works</td></tr>
+  <tr><td>Opera / Vivaldi</td><td class="yes">Works</td><td class="yes">Works</td></tr>
+  <tr><td>Safari</td><td class="yes">Works</td><td class="no">Not possible — <a href="#safari">see section 8</a></td></tr>
+  <tr><td>Firefox</td><td class="yes">Works</td><td class="no">Not possible — <a href="#safari">see section 8</a></td></tr>
+</table></div>
+<p>Every screen, every calculation, every invoice and every report behaves identically in all six. The only
+difference is the automatic folder saving, and that is not something missing from this app — Safari and
+Firefox do not let <em>any</em> web page write into a folder you choose. No program can work around it and no
+setting turns it on.</p>
+
+<h2 id="two">7 · Using it on two computers</h2>
+<p>There is no server and no account, so two computers are joined by a folder they can both see — that is,
+a folder inside Dropbox, OneDrive, Google Drive or iCloud Drive.</p>
+<div class="diagram">
+  <div class="dbox"><b>Laptop</b><span>connects to the folder</span></div>
+  <div class="arrow">→</div>
+  <div class="dbox mid"><b>Shared folder</b><span>Dropbox · Drive · OneDrive · iCloud</span></div>
+  <div class="arrow">→</div>
+  <div class="dbox"><b>Desktop</b><span>connects to the same folder</span></div>
+</div>
+<ol class="steps">
+  <li><b>On the first computer</b>Open <b>Backup &amp; Sync</b>, choose <b>Connect a folder</b>, and pick a
+    folder inside your cloud drive — for example <code>Dropbox/MyBusiness</code>. Let it finish syncing.</li>
+  <li><b>On the second computer</b>Copy the same <code>.html</code> file across (or download it again), open it,
+    and choose <b>I've used this before — find my work</b>. Point it at the very same folder. Your work appears.</li>
+  <li><b>From then on</b>Both computers write into that folder and both read from it. Close the app on one,
+    open it on the other, and your work is there.</li>
+</ol>
+<h3>What happens if you edit in both places</h3>
+<p>The app merges rather than overwrites. Each record carries the time it was last changed, and when a newer
+version of the file arrives the newer record wins, record by record. Editing different things on the two
+computers is safe. Editing <em>the same record</em> on both while they are offline means the later edit wins.</p>
+<div class="note warn"><b>Give the cloud a moment</b><br>
+Dropbox and Drive need a few seconds to move the file. If you close the laptop lid the instant you finish
+typing and immediately open the desktop, the file may not have arrived yet. Wait until your cloud app shows
+it has finished syncing.</div>
+<div class="note bad"><b>Do not put the folder in two different cloud services</b><br>
+One folder, one cloud service. Two services watching the same folder will fight over it and can leave
+conflicted copies.</div>
+
+<h2 id="safari">8 · If you use Safari or Firefox</h2>
+<p>Everything works except automatic folder saving. You keep your work safe by saving a backup file by hand
+instead — it is one click, and doing it once a week or two is plenty for most people.</p>
+<ol class="steps">
+  <li><b>Open Backup &amp; Sync</b>The screen tells you which browser you are on and what applies to you.</li>
+  <li><b>Click Save a backup</b>A <code>.json</code> file lands in your Downloads folder with the date in
+    its name.</li>
+  <li><b>Keep it somewhere sensible</b>Move it into Dropbox, Drive or an external disk. That file is your
+    entire business and it can be restored on any computer.</li>
+</ol>
+<p>If you would rather have the automatic version: right-click the <code>.html</code> file, choose
+<b>Open With</b>, and pick Chrome or Edge. Same file, same data, nothing to set up again. Both are free, and
+your data still never leaves your computer.</p>
+
+<h2 id="using">9 · Everyday use</h2>
+<h3>Adding and changing records</h3>
+<p>The blue button at the top right adds a new record. Click any row in a table to open and edit it. Required
+fields are marked with an asterisk; the app tells you if one is missing rather than losing what you typed.</p>
+<h3>The board</h3>
+<p>Drag a card from one column to another to change its status — booked to done, done to paid. It is the
+fastest way to keep a week tidy.</p>
+<h3>Invoices</h3>
+<p>Completed work waits on the invoices screen until you raise an invoice for it. Invoices print cleanly in
+black and white, whatever colour theme you are using, and your browser's print dialog can save them as PDF.</p>
+<h3>Reports</h3>
+<p>Any date range you like. Profit and loss, work by customer, by worker and by category. Print them, save
+them as PDF, or export any table to CSV for a spreadsheet or an accountant.</p>
+<h3>Settings</h3>
+<p>Your business name and address go on invoices. There are sixteen currencies, a date format, and a colour
+theme. Numbers and targets specific to your trade live here too.</p>
+
+<h2 id="backup">10 · Backups and moving to a new computer</h2>
+<h3>A backup file, any time</h3>
+<p><b>Backup &amp; Sync → Save a backup</b> writes one <code>.json</code> file containing everything.
+Keep a copy somewhere other than the computer it came from.</p>
+<h3>Restoring</h3>
+<p><b>Backup &amp; Sync → Restore</b>, choose the file, confirm. It replaces what is on that computer, so it
+tells you how many records the backup contains before it does anything.</p>
+<h3>New computer</h3>
+<ol class="steps">
+  <li><b>Take the app with you</b>Copy the <code>.html</code> file across, or download it again from your
+    Etsy purchases. It is the same file.</li>
+  <li><b>Bring the work across</b>Either connect to the same folder, or restore your latest backup file.</li>
+  <li><b>Check the total</b>The Backup &amp; Sync screen shows how many records you have. If it matches what
+    you expect, you are done.</li>
+</ol>
+
+<h2 id="trouble">11 · Troubleshooting</h2>
+<div class="tablewrap"><table>
+  <tr><th>What you see</th><th>What to do</th></tr>
+  <tr><td>The file opens as code, or downloads instead of opening</td><td>Right-click it, choose
+    <b>Open With</b>, and pick a browser.</td></tr>
+  <tr><td>"Not saved anywhere else" in the top bar</td><td>You have not connected a folder yet. Open
+    <b>Backup &amp; Sync</b> and connect one — <a href="#folder">section 6</a>.</td></tr>
+  <tr><td>The app opens empty on the second computer</td><td>Choose <b>I've used this before — find my
+    work</b> and point it at the shared folder. Also check the cloud has finished syncing.</td></tr>
+  <tr><td>No "Connect a folder" button</td><td>You are in Safari or Firefox. Use manual backups, or open the
+    file in Chrome or Edge — <a href="#safari">section 8</a>.</td></tr>
+  <tr><td>Everything disappeared</td><td>Almost always browser data was cleared on a computer with no folder
+    connected. Restore your latest backup file, then connect a folder so it cannot happen again.</td></tr>
+  <tr><td>A number looks wrong</td><td>Every figure is calculated from records you entered. Open the record
+    behind it — the detail panel shows the working, line by line.</td></tr>
+</table></div>
+
+<h2 id="faq">12 · Frequently asked</h2>
+<h3>Does it need the internet?</h3>
+<p>No. Once downloaded it runs with the network off. Nothing is sent anywhere, ever.</p>
+<h3>Is there an account or a subscription?</h3>
+<p>Neither. You bought the file; it is yours, and it keeps working.</p>
+<h3>Can I install it on more than one of my own computers?</h3>
+<p>Yes. Use it on as many of your own machines as you like.</p>
+<h3>Where exactly is my data?</h3>
+<p>In your browser's storage on your computer, and — once you connect a folder — in a plain file in that
+folder. Nowhere else. There is no server involved at any point.</p>
+<h3>Can I use it on a phone or tablet?</h3>
+<p>The screens work on a tablet. A phone is cramped for data entry and cannot connect a folder, so treat it
+as a viewer rather than the main machine.</p>
+<h3>Will there be updates?</h3>
+<p>Yes, free for your version. Updating is downloading the newer file and opening it — your data is not
+inside the app file, so it carries over.</p>
+<h3>Something is still wrong.</h3>
+<p>Message me through Etsy. Tell me which browser and which screen, and I will sort it out.</p>
+
+</main>
+</div>
+
+<footer><div class="wrap">
+  SayLang LLC · <a href="/privacy.html">Privacy</a> · <a href="/terms.html">Terms</a>
+</div></footer>
+
+</body>
+</html>
