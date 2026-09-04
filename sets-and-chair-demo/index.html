@@ -1869,30 +1869,56 @@ function validateVertical(){
      açıkken ziyaretçi oturum başına iki tıklamayla tam ürünü bedava kullanıyordu.
      build.py --demo artık ekleme/silme/sürükleme ve yedek yollarının GÖVDESİNİ
      siliyor; ziyaretçi kaydetmeye çalışınca açıkça salt okunur uyarısı görüyor.
-   ⚠ DEMO SATIN ALMA YOLUNU GÖSTERMELİ. Denedi, beğendi, nereden alacak?     */
+   ⚠ BANT ÜSTTE, ALTTA DEĞİL. Altta dururken uygulamanın kendi alt satırıyla
+     karışıyordu ve ziyaretçi kaydırmadan görmüyordu. Üstte, sayfayı AŞAĞI
+     İTEREK duruyor — hiçbir şeyin üstüne binmiyor.
+   ⚠ SATIN ALMA YOLU AÇIKÇA GÖRÜNMELİ. Denedi, beğendi, nereden alacak?     */
 const DEMO_MODE = true;          /* build.py --demo bunu true yapar */
-const DEMO_BUY_URL = "";          /* build.py --demo=<etsy url> */
+const DEMO_BUY_URL = "https://www.etsy.com/listing/4567224442";          /* build.py --demo=<etsy url> */
+const DEMO_BAR_H = 62;
 
 function demoBanner(){
   if (!DEMO_MODE) return;
-  const bar = el("div", {style:{
-    position:"fixed", left:"0", right:"0", bottom:"0", zIndex:"95",
-    display:"flex", alignItems:"center", gap:"12px", flexWrap:"wrap",
-    padding:"10px 18px", background:"var(--rail)", color:"var(--rail-active)",
-    borderTop:"1px solid var(--rail-hair)", fontSize:"12.5px",
-    boxShadow:"0 -2px 12px rgba(0,0,0,.18)"}}, [
-    el("span", {html:ICON.alert, style:{color:"var(--accent)", flex:"0 0 auto"}}),
-    el("span", {style:{flex:"1", minWidth:"200px", lineHeight:"1.5"}}, [
-      el("b", {text:"This is a read-only demo. "}),
-      el("span", {style:{opacity:".85"},
-        text:"Open every screen and every report with real sample data. Browsing, filtering and printing all work; adding, editing and deleting are switched off here. The full version is fully editable and saves your work on your own computer."})
-    ]),
-    DEMO_BUY_URL ? el("a", {href:DEMO_BUY_URL, target:"_blank", rel:"noopener",
-      class:"btn pri", style:{textDecoration:"none", flex:"0 0 auto"},
-      text:"Get the full version"}) : null
+  const css = document.createElement("style");
+  css.textContent = `
+    #demobar{position:fixed;left:0;right:0;top:0;height:${DEMO_BAR_H}px;z-index:9999;
+      display:flex;align-items:center;gap:18px;padding:0 22px;
+      background:linear-gradient(180deg,#20242B 0%,#15181E 100%);
+      border-bottom:2px solid #E8A33C;
+      box-shadow:0 4px 18px rgba(0,0,0,.32);
+      font-family:var(--f-ui),system-ui,sans-serif;color:#F2EDE3}
+    #demobar .dot{flex:0 0 13px;width:13px;height:13px;border-radius:50%;
+      background:#F06A45;box-shadow:0 0 0 5px rgba(240,106,69,.22)}
+    #demobar .lead{font-size:17px;font-weight:800;letter-spacing:1.6px;
+      text-transform:uppercase;white-space:nowrap}
+    #demobar .say{font-size:13.5px;color:#B9B2A6;line-height:1.35;min-width:0;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    #demobar .sp{flex:1 1 auto;min-width:8px}
+    #demobar .cta{text-align:right;line-height:1.25;white-space:nowrap}
+    #demobar .cta b{display:block;font-size:13.5px;color:#F0B450;font-weight:700}
+    #demobar .cta span{display:block;font-size:12px;color:#9E9689}
+    #demobar a.buy{flex:0 0 auto;display:inline-block;padding:11px 20px;border-radius:9px;
+      background:linear-gradient(180deg,#F58060 0%,#E4623C 100%);color:#fff;
+      font-size:15.5px;font-weight:800;letter-spacing:.3px;text-decoration:none;
+      border:2px solid #FFD9A8;box-shadow:0 3px 10px rgba(0,0,0,.35)}
+    body{padding-top:${DEMO_BAR_H}px !important}
+    @media (max-width:820px){
+      #demobar .say,#demobar .cta{display:none}
+    }`;
+  document.head.appendChild(css);
+  const bar = el("div", {id:"demobar"}, [
+    el("i", {class:"dot"}),
+    el("b", {class:"lead", text:"Live demo"}),
+    el("span", {class:"say",
+      text:"Explore every screen with real sample data · read-only preview, nothing you change is saved"}),
+    el("span", {class:"sp"}),
+    DEMO_BUY_URL ? el("span", {class:"cta"}, [
+      el("b", {text:"See the full app"}),
+      el("span", {text:"Instant download on Etsy"})]) : null,
+    DEMO_BUY_URL ? el("a", {class:"buy", href:DEMO_BUY_URL, target:"_blank",
+      rel:"noopener", text:"View on Etsy ↗"}) : null
   ]);
   document.body.appendChild(bar);
-  document.getElementById("view").style.paddingBottom = "62px";
 }
 
 /* ── 07_firstrun.js ── */
@@ -2502,11 +2528,11 @@ function stamp(r){ r._t = Date.now(); return r; }
 function rows(k){ return S[k] || (S[k] = []); }
 function byId(k, id){ return rows(k).find(r => r.id === id) || null; }
 function upsert(k, rec){
-  toast("Read-only demo — changes are not saved. The full version saves your work on your own computer.", "err");
+  toast("Live demo: changes are disabled. Purchase the app to save your own data.", "err");
   return rec;
 }
 function remove(k, id){
-  toast("Read-only demo — changes are not saved. The full version saves your work on your own computer.", "err");
+  toast("Live demo: changes are disabled. Purchase the app to save your own data.", "err");
 }
 
 /* ── 12_icons.js ── */
@@ -5183,7 +5209,7 @@ function viewBoard(){
         e.preventDefault(); e.currentTarget.classList.remove("drop");
         const j = byId(V.job.key, DRAG);
         if (j && j.status !== s.v){
-          toast("Read-only demo — changes are not saved. The full version saves your work on your own computer.", "err");
+          toast("Live demo: changes are disabled. Purchase the app to save your own data.", "err");
         }
       }}, [
       el("div", {class:"kb-head"}, [
@@ -5976,7 +6002,7 @@ function viewSettings(){
             onclick:() => confirmBox("Erase all data?",
               "Every load, invoice, truck and document on this device will be deleted. Download a backup first if you might want it back.",
               () => confirmBox("Really erase?", "This is the last warning. There is no undo.",
-                () => toast("Read-only demo — changes are not saved. The full version saves your work on your own computer.", "err"), "Erase everything"),
+                () => toast("Live demo: changes are disabled. Purchase the app to save your own data.", "err"), "Erase everything"),
               "Continue")})
         ])
       ])
