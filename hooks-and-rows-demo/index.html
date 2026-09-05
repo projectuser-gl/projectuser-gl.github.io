@@ -2670,8 +2670,17 @@ function areaChart(labels, series, opts){
     const lo = Math.min.apply(null, pos), hi = Math.max.apply(null, pos);
     if (lo > 0 && (hi - lo) < lo * 0.9) mn = Math.max(0, Math.floor((lo - (hi - lo) * 0.4) / 5) * 5);
   } else if (typeof opts.min === "number") mn = opts.min;
-  const mx = mn ? Math.ceil((Math.max.apply(null, all.concat([mn])) * 1.04) / 5) * 5
-                : (niceMax(Math.max.apply(null, all.concat([0])) * 1.08) || 10);
+  /* ⚠ NEGATIF SERI TABANA YAPISIYORDU. mn varsayilan 0 ve Y() alt
+     sinirda kirpiyor, yani eksiye inen her cizgi duz taban olarak
+     ciziliyordu — barChart'taki hatanin ayni sinifi (conure, boatmaint).
+     Veri eksiye giriyorsa taban verinin altina cekiliyor; hicbir deger
+     eksi degilse davranis AYNEN eskisi gibi kaliyor (tansiyon, pH gibi
+     min:"auto" kullanan seriler bozulmasin). */
+  const anyNeg = all.some(v => typeof v === "number" && v < 0);
+  if (anyNeg && typeof opts.min !== "number")
+    mn = -(niceMax(Math.abs(Math.min.apply(null, all)) * 1.08) || 10);
+  const mx = mn > 0 ? Math.ceil((Math.max.apply(null, all.concat([mn])) * 1.04) / 5) * 5
+                    : (niceMax(Math.max.apply(null, all.concat([0])) * 1.08) || 10);
   const span = Math.max(1, mx - mn);
   if (!opts.left) P.l = axisLeft(Array.from({length:5}, (_, i) => mx - (span/4) * i), opts.fmt, P.l);
   const iw = W - P.l - P.r, ih = h - P.t - P.b;
@@ -2683,7 +2692,8 @@ function areaChart(labels, series, opts){
   for (let i = 0; i <= 4; i++){
     const y = P.t + (ih/4) * i, v = mx - (span/4) * i;
     s.appendChild(sv("line", {x1:P.l, y1:y, x2:W-P.r, y2:y,
-      stroke:"var(--hair2)", "stroke-width":1}));
+      stroke:(anyNeg && Math.abs(v) < span/200) ? "var(--hair)" : "var(--hair2)",
+      "stroke-width":1}));
     const t = sv("text", {x:P.l-8, y:y+3.5, "text-anchor":"end", fill:"var(--muted)",
       "font-size":"10", "font-family":"var(--f-num)"});
     t.textContent = opts.fmt ? opts.fmt(v) : num(v);
