@@ -6025,16 +6025,22 @@ function viewSettings(){
       onclick:() => { SET_TAB = t.v; render(); }}))));
 
   if (SET_TAB === "company"){
-    out.appendChild(setPanel("Your Company",
-      "These details print on every invoice and report.", [
-      {k:"company", label:"Company name", ph:"Reyes Transport LLC", full:true},
-      {k:"address", label:"Street address", ph:"1420 Industrial Pkwy"},
-      {k:"city", label:"City, state, ZIP", ph:"Dallas, TX 75201"},
-      {k:"phone", label:"Phone", ph:"(555) 010-2233"},
-      {k:"email", label:"Email", ph:"billing@example.com"},
-      {k:"mc", label:"MC number", ph:"123456"},
-      {k:"dot", label:"DOT number", ph:"9876543"}
-    ]));
+    /* ⚠ MC/DOT NUMARASI NAKLIYEYE AIT. Kayit kipindeki (noMoney) bir
+       urunde — tansiyon gunlugu, sosyal hizmet saat kaydi — hem bu iki
+       alan hem de "her faturada basilir" cumlesi yanlis. Dikey kendi
+       basligini verebilir (V.ownerLabel). */
+    const para = !V.noMoney;
+    out.appendChild(setPanel(V.ownerLabel || (para ? "Your Company" : "Your Details"),
+      para ? "These details print on every invoice and report."
+           : "These details print on the reports you export.",
+      [{k:"company", label:V.ownerNameLabel || (para ? "Company name" : "Your name"),
+        ph:para ? "Reyes Transport LLC" : "", full:true},
+       {k:"address", label:"Street address"},
+       {k:"city", label:"City, state, ZIP"},
+       {k:"phone", label:"Phone"},
+       {k:"email", label:"Email"}]
+      .concat(para ? [{k:"mc", label:"MC number", ph:"123456"},
+                      {k:"dot", label:"DOT number", ph:"9876543"}] : [])));
   }
 
   if (SET_TAB === "look"){
@@ -6104,9 +6110,17 @@ function viewSettings(){
   }
 
   if (SET_TAB === "data"){
-    const counts = [["Loads","loads"],["Invoices","invoices"],["Trucks","trucks"],
-      ["Drivers","drivers"],["Customers","brokers"],["Fuel entries","fuel"],
-      ["Expenses","expenses"],["Documents","docs"]];
+    /* ⚠ BU LISTE SABIT NAKLIYE LISTESIYDI: "Loads · Trucks · Drivers ·
+       Fuel entries" HER URUNDE gorunuyordu ve nakliye disindaki 296
+       urunde hepsi 0 yaziyordu — sosyal hizmet kaydinda "0 Trucks".
+       Artik urunun KENDI listelerinden kuruluyor (dataLists) ve
+       basliklar dikeyin kendi sozcukleri. */
+    const counts = dataLists().map(k => {
+      if (k === V.job.key) return [W("jobs"), k];
+      if (k === "invoices") return ["Invoices", k];
+      const e = (V.entities || {})[k];
+      return [e ? (e.title || e.noun + "s") : (k.charAt(0).toUpperCase() + k.slice(1)), k];
+    }).concat(rows("docs").length ? [["Documents", "docs"]] : []);
     out.appendChild(el("div", {class:"panel"}, [
       el("div", {class:"panel-head"}, [el("h2", {text:"Your Data"}),
         el("div", {class:"hint", text:"Stored on this computer only — nothing is uploaded"})]),
@@ -6360,7 +6374,7 @@ function viewSync(){
     body1.appendChild(stepCard(2, "That's it",
       auto ? ("The file is called " + (FILE_NAME || (APP() + "-<this computer>.json")) +
               ". Leave it alone — the app keeps it up to date. If this computer ever dies, open the app on a new one and read that folder.")
-           : "Once a folder is chosen there is no second step. Every load, invoice and receipt lands there as you work.",
+           : "Once a folder is chosen there is no second step. Every " + W("jobLower") + " you log lands there as you work.",
       null, auto));
   } else {
     body1.appendChild(el("div", {style:{padding:"13px 16px", display:"flex", gap:"11px",
@@ -6375,7 +6389,7 @@ function viewSync(){
       ])
     ]));
     body1.appendChild(stepCard(1, "Recommended: open this file in Chrome or Edge",
-      "Same file, same app, nothing to install or set up again. Right-click Freight Dispatch Pro.html, choose Open With, and pick Google Chrome or Microsoft Edge. Come back to this screen there and the folder option will be waiting. Both browsers are free, and your data still never leaves your computer.",
+      "Same file, same app, nothing to install or set up again. Right-click " + V.name + ".html, choose Open With, and pick Google Chrome or Microsoft Edge. Come back to this screen there and the folder option will be waiting. Both browsers are free, and your data still never leaves your computer.",
       null));
     body1.appendChild(stepCard(2, "Or stay in " + browserName() + " and save by hand",
       "Use Save backup file below, every week or two. It is not automatic, but it protects you just as well as long as you actually do it.",
@@ -6408,14 +6422,16 @@ function viewSync(){
             ? "Your folder already holds a live copy. This is for the other kind of accident — fire, theft, or the whole drive going with the computer. One file, once a month, kept off-site: emailed to yourself, or on a USB stick in the truck."
             : "One file with everything in it. Email it to yourself or keep it on a USB stick — anywhere that is not this computer."})),
       stepCard(1, "Save it",
-        "Everything in one file: loads, invoices, trucks, drivers, fuel, IFTA, settings.",
+        "Everything in one file: " + dataLists().map(k => k === V.job.key ? W("jobsLower")
+          : ((V.entities || {})[k] ? ((V.entities[k].title || V.entities[k].noun + "s").toLowerCase()) : k))
+          .join(", ") + " and your settings.",
         el("div", {class:"btn-row"}, [
           el("button", {class:"btn " + (auto || daysSince !== null ? "" : "pri"),
             html:ICON.down + "<span>Save backup file</span>",
             onclick:function(){ exportBackup(); S.set.lastBackup = today(); commit(); render(); }})
         ]), daysSince !== null && daysSince <= 30),
       stepCard(2, "Bring it back",
-        "On any computer, open the app, come here and restore. Same loads, same invoice numbers, same settings.",
+        "On any computer, open the app, come here and restore. The same " + W("jobsLower") + ", the same settings.",
         el("div", {class:"btn-row"}, [
           el("button", {class:"btn", html:ICON.up + "<span>Restore from a backup file</span>",
             onclick:importBackup})
@@ -6438,10 +6454,10 @@ function viewSync(){
            : "Choose a folder above that lives inside Dropbox, Google Drive, OneDrive or iCloud Drive.",
       null, auto));
     body3.appendChild(stepCard(2, "Copy the app to the other computer",
-      "Copy Freight Dispatch Pro.html across — USB stick, email, however. Open it there and pick the same folder on that machine too.",
+      "Copy " + V.name + ".html across — USB stick, email, however. Open it there and pick the same folder on that machine too.",
       null));
     body3.appendChild(stepCard(3, "Work on either one",
-      "Each computer writes its own file, so you never overwrite each other — even working at the same time. If the same load was changed in both places, the newer change wins. Give the cloud a moment to sync and both screens agree.",
+      "Each computer writes its own file, so you never overwrite each other — even working at the same time. If the same " + W("jobLower") + " was changed in both places, the newer change wins. Give the cloud a moment to sync and both screens agree.",
       null));
   } else {
     body3.appendChild(stepCard(1, "Pull the other computer's work in",
@@ -6484,7 +6500,7 @@ function viewSync(){
            şirket bilgisi, logo, fatura numarası. Önce demo verisiyle
            karışıyordu; artık değiştiriyor. Kullanıcı bunu bilmeli, yoksa
            silme korkusuyla uygulamayı hiç kullanmaz. */
-        el("span", {text:"If you have a folder connected, this is a five-second problem: open the app, choose the same folder again, and everything comes back — every record, your company details, your logo and your invoice numbering. You do have to pick the folder once more, because clearing your data is supposed to remove the browser's memory of it. Nothing in the folder is touched."})
+        el("span", {text:"If you have a folder connected, this is a five-second problem: open the app, choose the same folder again, and everything comes back — every record and every setting you had. You do have to pick the folder once more, because clearing your data is supposed to remove the browser's memory of it. Nothing in the folder is touched."})
       ])
     ]),
     el("div", {style:{display:"flex", gap:"11px", alignItems:"flex-start"}}, [
@@ -7249,7 +7265,7 @@ const SETTING_KINDS = [
   "Not an authorised setting"];
 
 function supRow(id){ return byId("supervisors", id) || null; }
-function setRow(id){ return byId("settings", id) || null; }
+function setRow(id){ return byId("agencies", id) || null; }
 function supName(id){ const s = supRow(id); return s ? s.name : "—"; }
 function setName(id){ const s = setRow(id); return s ? s.agency : "—"; }
 
@@ -7623,21 +7639,21 @@ function chkRules(){
       d:m.n + " entries" + (isim.length ? ", mostly " + isim.join(", ") : "") +
         ". They stay in the log so the record is complete, but they are left out of every " +
         "total and out of the Form 4B figures.",
-      go:why.indexOf("setting") >= 0 ? "settings" : "supervisors"});
+      go:why.indexOf("setting") >= 0 ? "agencies" : "supervisors"});
   });
 
   /* ── kurum evrakı ── */
-  rows("settings").forEach(g => {
+  rows("agencies").forEach(g => {
     if (!setAuthorised(g)) return;
     if (!g.doc)
       out.push({k:"warn", t:"No authorisation document held for " + (g.agency || "a setting"),
         d:"Form 4B requires the operating certificate, SED waiver or certificate of " +
           "incorporation that lets the entity employ LMSWs and LCSWs to be attached. Ask for " +
-          "a copy now rather than at submission.", go:"settings"});
+          "a copy now rather than at submission.", go:"agencies"});
     if (g.outside)
       out.push({k:"warn", t:(g.agency || "A setting") + " is outside New York",
         d:"Experience completed outside New York State needs a Form 4Q from the same " +
-          "supervisor, in addition to Form 4B.", go:"settings"});
+          "supervisor, in addition to Form 4B.", go:"agencies"});
   });
 
   /* ── süpervizör bilgisi ── */
@@ -7662,10 +7678,10 @@ function chkRules(){
   if (g.months >= 4 && g.longestGap >= 3)
     out.push({k:"warn", t:g.longestGap + " months in a row with no supervision logged",
       d:"The hundred hours have to be distributed across the experience, not gathered at one " +
-        "end. The reference model is about an hour a week, or four hours a month.", go:"supervision"});
+        "end. The reference model is about an hour a week, or four hours a month.", go:"entries"});
   else if (g.months >= 6 && g.empty >= Math.ceil(g.months * 0.35))
     out.push({k:"warn", t:g.empty + " of " + g.months + " months have no supervision logged",
-      d:"Supervision is meant to run alongside the work rather than in bursts.", go:"supervision"});
+      d:"Supervision is meant to run alongside the work rather than in bursts.", go:"entries"});
 
   /* ── SAAT. Ürünün en sert uyarısı: bu hızla son tarihi aşıyorsun. ── */
   const pr = projection();
@@ -7723,12 +7739,15 @@ function viewChecks(){
   const box = el("div", {class:"stack", style:{gap:"12px"}});
   box.appendChild(el("div", {class:"panel", style:{padding:"11px 14px"}},
     el("div", {class:"sm", style:{color:"var(--ink2)", lineHeight:"1.6"},
-      text:"These are the four gates New York applies to supervised experience: the date your " +
-           "LMSW licence was issued, whether the setting is legally authorised, whether the " +
-           "supervisor qualifies, and whether the supervision was spread across the period. " +
-           "This page reports what your own log says against them. It does not decide whether " +
-           "you are eligible — the Department does, and the rules change, so check them at " +
-           "op.nysed.gov."})));
+      /* ⚠ "NEW YORK'UN UYGULADIGI DORT KAPI" FAZLA KESIN. Uygulama bir kurumun
+         gercekten yetkili olup olmadigini bilemez — yalnizca SENIN girdigini
+         okur. Ifade buna gore. */
+      text:"Four checks, run against what you have entered: the date your LMSW licence was " +
+           "issued, the setting type you chose, the licence type you gave the supervisor, and " +
+           "how the supervision is spread across the months. The app cannot verify that a " +
+           "setting really is authorised or that a licence is current — it reports what your " +
+           "own records say. Eligibility is the Department's decision, and the rules change, " +
+           "so check them at op.nysed.gov."})));
   if (!rs.length)
     box.appendChild(el("div", {class:"empty"}, [
       el("p", {text:"Nothing flagged."}),
@@ -7745,6 +7764,262 @@ function viewChecks(){
       el("div", {class:"panel-body"}, warn.map(card))]));
   }
   return box;
+}
+
+/* ── 23_ref.js ── */
+/* ═══ REFERANS PANELLERİ ════════════════════════════════════════════════
+   Kurum ve süpervizör tabloları üç yılda 3-5 satır oluyor ve sayfanın
+   altı boş kalıyor. Boşluğu SAHTE SATIRLA doldurmak yanlış olurdu —
+   gerçek bir LMSW'nin dört kurumu vardır, on iki değil.
+
+   Onun yerine oraya kullanıcının gerçekten aradığı şey konuyor: Form 4B'nin
+   kendi kategori listesi ve HER KATEGORİNİN İSTEDİĞİ EVRAK. Bu bilgi
+   normalde formun ikinci sayfasında küçük puntoyla duruyor ve insanlar
+   başvuru anında arıyor.
+
+   ⚠ crudView `height:100%` döndürüyor; esnek bir kutuya konup büyümesine
+     izin veriliyor, referans paneli altında sabit duruyor.
+   ⚠ V.pages ANAHTARI VARLIK ANAHTARIYLA AYNI. Çekirdek önce varlığı,
+     sonra V.pages'i yazıyor; yani burası varlık ekranını KASITLI olarak
+     eziyor ve içeride yine entityView çağırıyor.                       */
+
+function refWrap(key, panel){
+  return el("div", {class:"stack", style:{gap:"12px", height:"100%",
+    display:"flex", flexDirection:"column"}}, [
+    el("div", {style:{flex:"1 1 auto", minHeight:"0"}}, entityView(key)),
+    panel
+  ]);
+}
+
+/* Form 4B, Bölüm II madde 3 — dokuz kategori ve istediği ek. */
+const SETTING_DOCS = [
+  ["Private practice owned by the supervisor",
+   "Nothing extra beyond the supervisor's own licence — the practice is theirs"],
+  ["Professional entity (PLLC, PLLP, PC) owned by the supervisor",
+   "The consent from the State Education Department for the professional entity"],
+  ["Sole proprietorship or other entity authorised under law",
+   "The certificate of incorporation"],
+  ["OMH / OPWDD / OASAS / OCFS / DOCCS / SOFA / DOH or local district programme",
+   "The programme's operating certificate"],
+  ["Psychotherapy institute chartered by the Board of Regents",
+   "A copy of the Regents charter"],
+  ["School or college authorised to provide psychotherapy to students",
+   "A copy of the authorisation to provide psychotherapy to students"],
+  ["Not-for-profit with a 6503-a or 6503-b SED waiver",
+   "The waiver and the certificate of incorporation"],
+  ["Other authorised setting", "Whatever documents its authority to provide the service"],
+  ["Not an authorised setting", "Hours here do not count, whoever supervised them"]];
+
+function viewAgencies(){
+  const t = el("table", {style:{width:"100%", borderCollapse:"collapse"}});
+  t.appendChild(el("tr", {}, ["Type of setting on Form 4B", "What your supervisor has to attach"]
+    .map((h, i) => el("th", {class:"sm mut", style:{textAlign:"left", padding:"0 10px 6px 0",
+      fontWeight:"600", textTransform:"uppercase", fontSize:"10px", letterSpacing:".5px",
+      borderBottom:"1px solid var(--hair)", width:i ? "auto" : "46%"}, text:h}))));
+  SETTING_DOCS.forEach(([k, d]) => {
+    const yok = k === "Not an authorised setting";
+    t.appendChild(el("tr", {}, [
+      el("td", {style:{padding:"6px 10px 6px 0", fontSize:"12.5px", lineHeight:"1.5",
+        borderBottom:"1px solid var(--hair2)",
+        color:yok ? "var(--warnd)" : "var(--ink)"}, text:k}),
+      el("td", {style:{padding:"6px 0", fontSize:"12.5px", lineHeight:"1.5",
+        borderBottom:"1px solid var(--hair2)", color:"var(--ink2)"}, text:d})]));
+  });
+  return refWrap("agencies", el("div", {class:"panel"}, [
+    el("div", {class:"panel-head"}, [
+      el("h2", {text:"Which document each setting needs"}),
+      el("div", {class:"sp"}),
+      el("div", {class:"hint", text:"Form 4B, Section II item 3"})]),
+    el("div", {class:"panel-body"}, [
+      el("div", {class:"sm mut", style:{marginBottom:"9px", lineHeight:"1.6"},
+        text:"Your supervisor attaches this to Form 4B — but you are the one who has to get " +
+             "hold of it, and it is far easier while you still work there. Ask now, file it " +
+             "with your own records."}),
+      t])]));
+}
+
+function viewSupervisors(){
+  const b = el("div", {style:{display:"grid", gap:"12px",
+    gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))"}});
+  const list = (title, hint, items) => {
+    const box = el("div", {class:"stack", style:{gap:"5px"}});
+    items.forEach(x => box.appendChild(el("div", {style:{display:"flex", gap:"9px",
+      alignItems:"flex-start", padding:"5px 0", borderBottom:"1px solid var(--hair2)"}}, [
+      el("span", {class:"mono sm mut", style:{flex:"0 0 auto"}, text:"·"}),
+      el("span", {style:{fontSize:"12.5px", lineHeight:"1.55", color:"var(--ink2)"}, text:x})])));
+    return el("div", {class:"panel"}, [
+      el("div", {class:"panel-head"}, [el("h2", {text:title}), el("div", {class:"sp"}),
+        el("div", {class:"hint", text:hint})]),
+      el("div", {class:"panel-body"}, box)]);
+  };
+  b.appendChild(list("Who may supervise", "Appendix A", [
+    "A Licensed Clinical Social Worker, registered and licensed",
+    "A licensed psychologist meeting the qualifications in the regulation",
+    "A physician who is a diplomate in psychiatry of the ABPN, or equivalent training",
+    "Never a family member — that relationship disqualifies the experience",
+    "Your supervisor must provide the diagnosis and treatment plan for each client, discuss " +
+    "your cases with you, and give oversight in diagnosing and treating them"]));
+  b.appendChild(list("What Form 4B asks about each one", "Section II item 2", [
+    "Their name, and which of the three licences they hold",
+    "Licence number, jurisdiction and licence date for that licence",
+    "ABPN certificate number if they are a psychiatrist",
+    "The supervision period, start and end",
+    "Total client contact hours and total supervision hours in that period",
+    "Their signature — and they send the form to the Office of the Professions themselves"]));
+  return refWrap("supervisors", b);
+}
+
+/* ── 35_insight.js ── */
+/* ═══ EKRAN: INSIGHT ════════════════════════════════════════════════════
+   ⚠ ÇEKİRDEĞİN RAPOR EKRANI PARA RAPORUDUR. Bu üründe "Where the money
+     goes", "Profitability", "Gross", "Net", "Customer" sütunlarıyla
+     çıkıyordu — bir sosyal hizmet saat kaydında bunu gören alıcı ürünün
+     başka bir şeyden dönüştürüldüğünü anlar ve güveni biter. Nav'a bu
+     ekran giriyor; çekirdeğinki nav'da yok.
+   ⚠ BURADAKİ HER TABLO BAŞVURUDA İŞE YARAR: süpervizör ve kurum başına
+     saat (Form 4B'nin kaynağı), aylık temas, bireysel/grup dağılımı,
+     hangi formun eksiği kaldığı, ve elenen saatler sebebiyle.          */
+
+function insPanel(t, hint, kid){
+  return el("div", {class:"panel"}, [
+    el("div", {class:"panel-head"}, [el("h2", {text:t}), el("div", {class:"sp"}),
+      hint ? el("div", {class:"hint", text:hint}) : null]),
+    el("div", {class:"panel-body"}, kid)]);
+}
+function insTable(cols, rowsIn, empty){
+  if (!rowsIn.length) return el("div", {class:"sm mut", text:empty});
+  const t = el("table", {style:{width:"100%", borderCollapse:"collapse"}});
+  t.appendChild(el("tr", {}, cols.map((c, i) =>
+    el("th", {class:"sm mut", style:{textAlign:i ? "right" : "left", padding:"0 0 6px",
+      fontWeight:"600", textTransform:"uppercase", fontSize:"10px", letterSpacing:".5px",
+      borderBottom:"1px solid var(--hair)"}, text:c}))));
+  rowsIn.forEach(r => t.appendChild(el("tr", {}, r.map((v, i) =>
+    el("td", {style:{padding:"5px 0", textAlign:i ? "right" : "left", fontSize:"12.5px",
+      borderBottom:"1px solid var(--hair2)"}},
+      typeof v === "object" ? v : document.createTextNode(String(v)))))));
+  return t;
+}
+
+function insPrint(){
+  const p = applicant();
+  if (!p){ toast("Add yourself first.", "err"); return; }
+  const pr = projection();
+  const packs = form4bPacks();
+  const kv = (k, v) => "<tr><th>" + esc(k) + "</th><td>" + v + "</td></tr>";
+  printWindow("Supervised experience summary — " + esc(p.name || ""),
+   "<style>body{font:13px/1.55 Georgia,serif;color:#1a1a1a;max-width:760px;margin:0 auto;padding:26px}" +
+   "h1{font-size:19px;margin:0 0 3px}h2{font-size:12px;margin:20px 0 6px;text-transform:uppercase;" +
+   "letter-spacing:.7px;font-family:Helvetica,Arial,sans-serif;color:#555;border-bottom:1px solid #ccc;padding-bottom:3px}" +
+   ".sub{margin:0;color:#666;font-size:12px}table{width:100%;border-collapse:collapse}" +
+   "th,td{text-align:left;padding:4px 7px;border-bottom:1px solid #e4e4e4;vertical-align:top}" +
+   "thead th{font:600 10.5px Helvetica,Arial,sans-serif;text-transform:uppercase;color:#666;border-bottom:1px solid #999}" +
+   ".kv th{width:250px;font:600 12px Helvetica,Arial,sans-serif;color:#444}.n{font-family:ui-monospace,Menlo,monospace}" +
+   ".note{margin-top:22px;font-size:10.5px;color:#777;border-top:1px solid #ddd;padding-top:8px;line-height:1.5}</style>" +
+   "<h1>" + esc(p.name || "") + " — supervised experience summary</h1>" +
+   "<p class='sub'>Prepared " + date(today()) +
+     (p.lmswNo ? " · LMSW licence " + esc(p.lmswNo) : "") +
+     (p.lmswDate ? " · issued " + date(p.lmswDate) : "") + "</p>" +
+   "<h2>Where it stands</h2><table class='kv'>" +
+   kv("Client contact hours", "<b>" + num2(totContact()) + "</b> of " + num1(reqContact())) +
+   kv("Supervision hours", "<b>" + num2(totSup()) + "</b> of " + num1(reqSup()) +
+      " — " + num2(totSup(null, null, "Individual")) + " individual, " +
+      num2(totSup(null, null, "Group")) + " group") +
+   kv("Months elapsed", monthsElapsed() === null ? "—" : Math.round(monthsElapsed()) +
+      " of " + num1(reqMonths()) + " minimum") +
+   kv("Earliest application date", earliestDate() ? date(earliestDate()) : "—") +
+   kv("Six-year limit", deadline() ? date(deadline()) : "—") +
+   kv("Hours excluded", num2(lostHours()) + " — see the reasons below") +
+   "</table>" +
+   "<h2>Form 4B — one per supervisor and setting</h2>" +
+   "<table><thead><tr><th>Supervisor</th><th>Setting</th><th>Period</th>" +
+   "<th class='n'>Contact</th><th class='n'>Supervision</th></tr></thead><tbody>" +
+   packs.map(m => "<tr><td>" + esc(supName(m.supervisorId)) + "</td><td>" +
+     esc(setName(m.settingId)) + "</td><td class='n'>" + date(m.from) + " – " + date(m.to) +
+     "</td><td class='n'>" + num2(m.contact) + "</td><td class='n'>" + num2(m.sup) +
+     "</td></tr>").join("") + "</tbody></table>" +
+   "<p class='note'>Figures counted from the applicant's own log. This is a personal record, " +
+   "not a submission and not legal advice; it has no connection to the New York State Education " +
+   "Department. Form 4B must be completed and sent by each supervisor. Check the current " +
+   "requirements at op.nysed.gov.</p>");
+}
+
+function viewInsight(){
+  const p = applicant();
+  if (!p) return el("div", {class:"empty"}, el("p", {text:"Add yourself under You first."}));
+
+  /* süpervizör ve kurum başına */
+  const bySup = rows("supervisors").map(s => {
+    const l = entryRows(null, null, true).filter(r => r.supervisorId === s.id);
+    return [s.name || "—", num2(l.reduce((a, r) => a + contactOf(r), 0)),
+            num2(l.reduce((a, r) => a + supOf(r), 0)), l.length];
+  }).filter(r => r[1] > 0 || r[2] > 0).sort((a, b) => b[1] - a[1]);
+  const bySet = rows("agencies").map(g => {
+    const l = entryRows(null, null, true).filter(r => r.settingId === g.id);
+    return [g.agency || "—", num2(l.reduce((a, r) => a + contactOf(r), 0)),
+            num2(l.reduce((a, r) => a + supOf(r), 0)), l.length];
+  }).filter(r => r[1] > 0 || r[2] > 0).sort((a, b) => b[1] - a[1]);
+
+  /* elenen saatler, sebebiyle */
+  const lost = {};
+  rows("entries").forEach(r => { const w = entryBlock(r); if (!w) return;
+    lost[w] = (lost[w] || 0) + contactOf(r) + supOf(r); });
+  const lostRows = Object.keys(lost).sort((a, b) => lost[b] - lost[a])
+    .map(k => [k.charAt(0).toUpperCase() + k.slice(1), num2(lost[k])]);
+
+  /* aylık temas */
+  const m = supByMonth();
+  const cm = m.map(x => {
+    const from = x.k + "-01", to = addDays(monthKey(addDays(from, 40)) + "-01", -1);
+    return {k:x.k, c:totContact(from, to), s:totSup(from, to)};
+  });
+
+  /* Form 4B hazırlık */
+  const packs = form4bPacks().map(pk => {
+    const s = supRow(pk.supervisorId), g = setRow(pk.settingId);
+    const eksik = [];
+    if (!s || !s.licNo) eksik.push("licence no");
+    if (!s || !s.licDate) eksik.push("licence date");
+    if (g && !g.doc) eksik.push("authorisation document");
+    if (g && g.outside) eksik.push("Form 4Q");
+    return [supName(pk.supervisorId), setName(pk.settingId),
+            eksik.length ? el("span", {class:"pill warn", text:eksik.join(", ")})
+                         : el("span", {class:"pill good", text:"ready"})];
+  });
+
+  const z = d0 => d0;
+  return el("div", {class:"stack", style:{gap:"12px"}}, [
+    el("div", {class:"toolbar"}, [
+      el("button", {class:"btn pri", text:"Print the experience summary", onclick:insPrint}),
+      el("div", {class:"sp", style:{flex:"1"}}),
+      el("span", {class:"sm mut", text:num2(totContact()) + " contact · " + num2(totSup()) +
+        " supervision · " + num2(lostHours()) + " excluded"})]),
+    el("div", {style:{display:"grid", gap:"12px",
+      gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))"}}, [
+      insPanel("Hours by supervisor", "counted hours only",
+        insTable(["Supervisor", "Contact", "Supervision", "Entries"], bySup, "No counted hours yet.")),
+      insPanel("Hours by setting", "counted hours only",
+        insTable(["Setting", "Contact", "Supervision", "Entries"], bySet, "No counted hours yet."))
+    ]),
+    insPanel("Client contact by month", "the shape of the 2,000",
+      cm.length > 2
+        ? barChart(cm.map((x, i) => i % Math.ceil(cm.length / 12) ? "" : monthLabel(x.k)),
+            cm.map(x => x.c), {height:200, fmt:v => num1(v) + "h"})
+        : el("div", {class:"sm mut", text:"A few months of entries and the shape appears."})),
+    el("div", {style:{display:"grid", gap:"12px",
+      gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))"}}, [
+      insPanel("Individual and group supervision", "both count in New York",
+        insTable(["Type", "Hours", "Share"], [
+          ["Individual", num2(totSup(null, null, "Individual")),
+           num1(100 * totSup(null, null, "Individual") / Math.max(0.01, totSup())) + "%"],
+          ["Group", num2(totSup(null, null, "Group")),
+           num1(100 * totSup(null, null, "Group") / Math.max(0.01, totSup())) + "%"]
+        ], "No supervision logged yet.")),
+      insPanel("Form 4B readiness", "one per supervisor and setting",
+        insTable(["Supervisor", "Setting", "Status"], packs, "Nothing to certify yet.")),
+      insPanel("Excluded hours and why", "kept in the record, left out of the totals",
+        insTable(["Reason", "Hours"], lostRows, "Nothing excluded — every logged hour counts."))
+    ])
+  ]);
 }
 
 /* ── 41_demo.js ── */
@@ -7870,7 +8145,11 @@ function DEMO(){
   const son = entries[entries.length - 6];
   if (son){ son.status = "flag"; son.note = "was this 4 hours or 4 clients? check the diary"; }
 
-  return {people:people, supervisors:sups, settings:sets, entries:entries,
+  /* ⚠ ANAHTAR `agencies`. Varlik `settings` iken cekirdegin PAGES.settings
+     sayfasiyla cakisiyordu; ad degistirildi ve demo'nun donus anahtari
+     da onunla birlikte degismek ZORUNDA — yoksa normalize() diziyi
+     tanimiyor, butun kurumlar bos geliyor ve urun sessizce coker. */
+  return {people:people, supervisors:sups, agencies:sets, entries:entries,
           set:{currency:"USD", dateFmt:"MM/DD/YYYY", skin:"graphite",
                company:"Renata Okoro", railCollapsed:false},
           _meta:{ver:"1.0.0", created:LMSW, device:"demo", demo:true}};
@@ -7910,7 +8189,7 @@ const V = {
     "Appendix A and Form 4B at op.nysed.gov before you rely on any figure here.",
   dashSub:"Contact hours, supervision hours, both clocks, and what the last ninety days say about the deadline",
   allClear:"Every logged hour is counting and the pace clears the six-year limit.",
-  rank:{title:"Hours by Setting", field:"settingId", entity:"settings"},
+  rank:{title:"Hours by Setting", field:"settingId", entity:"agencies"},
 
   /* ⚠ İZLENEN SAYI GÜNLÜK TEMAS SAATİ — günden güne değişen ve 2.000'i
      dolduran şey bu. İkinci seri süpervizyon: ikisi aynı grafikte,
@@ -7922,7 +8201,7 @@ const V = {
   metric:{key:"contact", label:"Client contact hours", unit:"h",
           low:4, high:8, targetPct:55, fmt:v => num2(v)},
   metric2:{key:"supervision", label:"Supervision hours", unit:"h", fmt:v => num2(v)},
-  subject:{entity:"settings", key:"settingId", label:"Setting"},
+  subject:{entity:"agencies", key:"settingId", label:"Setting"},
   streak:{label:"Days logged", everyDays:1},
 
   words:{
@@ -7935,7 +8214,7 @@ const V = {
   job:{
     key:"entries", icon:"chart", board:false,
     openLabel:"Not counting",
-    clientKey:"settingId", clientEntity:"settings",
+    clientKey:"settingId", clientEntity:"agencies",
     refKey:"ref", startKey:"date", dateKey:"date",
     labelHead:"Entry", dateHead:"Date", qtyHead:"Contact",
     rateHead:"Supervision", wasteHead:"Counts",
@@ -7961,7 +8240,7 @@ const V = {
     cardSub:r => num2(contactOf(r)) + " contact" +
       (supOf(r) ? " · " + num2(supOf(r)) + " " + (isGroup(r) ? "group" : "individual") + " supervision" : "") +
       (counts(r) ? "" : " · not counting"),
-    blank:() => { const g = rows("settings")[0], s = rows("supervisors")[0];
+    blank:() => { const g = rows("agencies")[0], s = rows("supervisors")[0];
       return {status:"logged", date:today(), contact:0, supervision:0,
               supType:"Individual", settingId:g ? g.id : "", supervisorId:s ? s.id : ""}; },
 
@@ -7987,7 +8266,7 @@ const V = {
 
     fields:() => [
       {k:"date", label:"Date", type:"date", req:true},
-      {k:"settingId", label:"Setting", type:"ref", ref:"settings",
+      {k:"settingId", label:"Setting", type:"ref", ref:"agencies",
        refLabel:r => r.agency, req:true},
       {k:"supervisorId", label:"Supervisor", type:"ref", ref:"supervisors",
        refLabel:r => r.name, req:true},
@@ -7995,13 +8274,14 @@ const V = {
          (not yazma, vaka toplantısı, seyahat) 2.000'e girmiyor; alan
          adının ve ipucunun bunu söylemesi gerekiyor. */
       {k:"contact", label:"Direct client contact hours", type:"num", min:0, max:24, step:"0.25",
-       hint:"Face-to-face diagnosis, psychotherapy and assessment-based treatment planning. " +
-            "Paperwork, case meetings and travel are not client contact."},
+       hint:"Client contact hours in diagnosis, psychotherapy and assessment-based treatment " +
+            "planning — the wording New York uses. Paperwork, case meetings and travel are not " +
+            "client contact."},
       {k:"supervision", label:"Clinical supervision hours", type:"num", min:0, max:12, step:"0.25",
        hint:"In person, with the supervisor named above"},
       {k:"supType", label:"Supervision was", type:"select",
        opts:["Individual", "Group"],
-       hint:"Both count toward the hundred hours in New York. The split is on the Supervision page."},
+       hint:"Both count toward the hundred hours in New York. The split between the two is on the dashboard."},
       {k:"clients", label:"Clients seen", type:"num", min:0, max:60},
       {k:"excluded", label:"Do not count this entry", type:"check",
        hint:"Keeps the row in your record but leaves it out of every total"},
@@ -8137,19 +8417,29 @@ const V = {
 
   reports:["jobs"],
 
+  /* ⚠ agencies ve supervisors BURADA VARLIK EKRANINI EZİYOR — kasıtlı.
+     İçeride yine entityView çağrılıyor, altına referans paneli ekleniyor;
+     üç yılda dört satır kalan sayfanın boş yarısı sahte satırla değil,
+     kullanıcının başvuru anında aradığı bilgiyle doluyor. */
   pages:{
     form4b:{t:"Form 4B", s:"The three boxes, one set per supervisor and setting",
             i:"print", fn:() => viewForm4b()},
-    checks:{t:"Checks", s:"The four gates New York applies, against your own log",
-            i:"alert", fn:() => viewChecks()}
+    checks:{t:"Checks", s:"Four eligibility checks, run against what you have entered",
+            i:"alert", fn:() => viewChecks()},
+    agencies:{t:"Work Settings", s:"Hours only count in a setting legally authorised to provide psychotherapy",
+              i:"home", fn:() => viewAgencies()},
+    supervisors:{t:"Supervisors", s:"What Form 4B asks them to certify — collect it while you are still in touch",
+                 i:"user", fn:() => viewSupervisors()},
+    insight:{t:"Insight", s:"Hours by supervisor and setting, the monthly shape, and what each Form 4B still needs",
+             i:"chart", fn:() => viewInsight()}
   },
 
   nav:[
     ["Experience", ["dash", "entries"]],
     ["Application", ["form4b", "checks"]],
-    ["Who and Where", ["supervisors", "settings"]],
+    ["Who and Where", ["supervisors", "agencies"]],
     ["You", ["people"]],
-    ["Insight", ["reports"]]
+    ["Insight", ["insight"]]
   ],
 
   counts:{
@@ -8273,8 +8563,11 @@ V.entities.supervisors = {
    ⚠ TÜR LİSTESİ FORM 4B'NİN KENDİ LİSTESİ. Madde 3'te dokuz kutu var ve
      her biri farklı bir evrak istiyor; serbest metin bırakmak kullanıcıyı
      formun karşısında yalnız bırakırdı. */
-V.entities.settings = {
-  noun:"Setting", title:"Settings", icon:"home",
+/* ⚠ BASLIK "Settings" DEGIL. Cekirdegin kendi Ayarlar sayfasi da
+   "Settings"; yan yana iki ayni ad kullaniciyi sasirtiyor. NYSED'in
+   sozcugu "setting" oldugu icin alan dili korunuyor ama ayirt edici. */
+V.entities.agencies = {
+  noun:"Setting", title:"Work Settings", icon:"home",
   sub:"Hours only count in a setting legally authorised to provide psychotherapy",
   fields:() => [
     {k:"agency", label:"Agency or practice name", req:true},
