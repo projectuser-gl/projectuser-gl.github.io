@@ -1874,7 +1874,7 @@ function validateVertical(){
      İTEREK duruyor — hiçbir şeyin üstüne binmiyor.
    ⚠ SATIN ALMA YOLU AÇIKÇA GÖRÜNMELİ. Denedi, beğendi, nereden alacak?     */
 const DEMO_MODE = true;          /* build.py --demo bunu true yapar */
-const DEMO_BUY_URL = "https://www.etsy.com/listing/4567224200";          /* build.py --demo=<etsy url> */
+const DEMO_BUY_URL = "";          /* build.py --demo=<etsy url> */
 const DEMO_BAR_H = 62;
 
 function demoBanner(){
@@ -1968,7 +1968,7 @@ async function firstRun(){
 
   if (HAS_FS) body.appendChild(card(ICON.folder,
     "I've used this before — find my work",
-    "Choose the folder you were saving to. Every record, your company details, your logo and your invoice numbering come back exactly as they were.",
+    "Choose the folder you were saving to. Every record and every setting comes back exactly as it was.",
     "accent", async () => { closeModal(); await pickFolder(); render(); }));
   else if (HAS_DIR_READ) body.appendChild(card(ICON.folder,
     "I've used this before — find my work",
@@ -1980,12 +1980,13 @@ async function firstRun(){
     "info", () => { closeModal(); importBackup(); }));
 
   body.appendChild(card(ICON.load, "Show me around with sample data",
-    "A working example business so you can click through every screen before entering anything real. You can clear it whenever you like.",
+    (V.noMoney ? "A worked example so you can click through every screen before entering anything real. You can clear it whenever you like."
+     : "A working example business so you can click through every screen before entering anything real. You can clear it whenever you like."),
     "good", () => { closeModal();
       S = normalize(ageDemoInvoices(V.demo())); saveLocal(); render();
       toast("This is sample data — clear it from Backup & Sync when you're ready."); }));
 
-  body.appendChild(card(ICON.plus, "Start empty — this is my business",
+  body.appendChild(card(ICON.plus, V.noMoney ? "Start empty" : "Start empty — this is my business",
     "Begin with nothing in it and enter your own work straight away.",
     "muted", () => { closeModal();
       S = normalize(null); saveLocal(); render(); go("settings"); }));
@@ -2485,7 +2486,7 @@ function pullFromFolderRead(){
     const files = Array.from(inp.files || [])
       .filter(f => fileMine(f.name));
     if (!files.length){
-      toast("No dispatch files in that folder.", "err");
+      toast("No " + V.name + " files in that folder.", "err");
       return;
     }
     let n = 0, seen = 0;
@@ -2670,8 +2671,21 @@ function areaChart(labels, series, opts){
     const lo = Math.min.apply(null, pos), hi = Math.max.apply(null, pos);
     if (lo > 0 && (hi - lo) < lo * 0.9) mn = Math.max(0, Math.floor((lo - (hi - lo) * 0.4) / 5) * 5);
   } else if (typeof opts.min === "number") mn = opts.min;
-  const mx = mn ? Math.ceil((Math.max.apply(null, all.concat([mn])) * 1.04) / 5) * 5
-                : (niceMax(Math.max.apply(null, all.concat([0])) * 1.08) || 10);
+  /* ⚠ NEGATIF SERI TABANA YAPISIYORDU. mn varsayilan 0 ve Y() alt
+     sinirda kirpiyor, yani eksiye inen her cizgi duz taban olarak
+     ciziliyordu — barChart'taki hatanin ayni sinifi (conure, boatmaint).
+     Veri eksiye giriyorsa taban verinin altina cekiliyor; hicbir deger
+     eksi degilse davranis AYNEN eskisi gibi kaliyor (tansiyon, pH gibi
+     min:"auto" kullanan seriler bozulmasin). */
+  const anyNeg = all.some(v => typeof v === "number" && v < 0);
+  if (anyNeg && typeof opts.min !== "number")
+    mn = -(niceMax(Math.abs(Math.min.apply(null, all)) * 1.08) || 10);
+  /* ⚠ TAVAN ISTEGE BAGLI VE OPT-IN. niceMax yuvarlarken 130'luk bir
+     seriyi 200'e tasiyor ve grafigin yarisi bos kaliyor. `opts.max`
+     VERILMEDIKCE hicbir sey degismiyor — yayindaki urunler etkilenmez. */
+  const mx = (typeof opts.max === "number" && opts.max > mn) ? opts.max
+    : mn > 0 ? Math.ceil((Math.max.apply(null, all.concat([mn])) * 1.04) / 5) * 5
+             : (niceMax(Math.max.apply(null, all.concat([0])) * 1.08) || 10);
   const span = Math.max(1, mx - mn);
   if (!opts.left) P.l = axisLeft(Array.from({length:5}, (_, i) => mx - (span/4) * i), opts.fmt, P.l);
   const iw = W - P.l - P.r, ih = h - P.t - P.b;
@@ -2683,29 +2697,54 @@ function areaChart(labels, series, opts){
   for (let i = 0; i <= 4; i++){
     const y = P.t + (ih/4) * i, v = mx - (span/4) * i;
     s.appendChild(sv("line", {x1:P.l, y1:y, x2:W-P.r, y2:y,
-      stroke:"var(--hair2)", "stroke-width":1}));
+      stroke:(anyNeg && Math.abs(v) < span/200) ? "var(--hair)" : "var(--hair2)",
+      "stroke-width":1}));
     const t = sv("text", {x:P.l-8, y:y+3.5, "text-anchor":"end", fill:"var(--muted)",
       "font-size":"10", "font-family":"var(--f-num)"});
     t.textContent = opts.fmt ? opts.fmt(v) : num(v);
     s.appendChild(t);
   }
+  /* ⚠ VERİSİ OLMAYAN AY, SIFIR ÖLÇÜM DEĞİLDİR. Aylık ortalama serisi boş
+     ayda 0 döndürüyordu ve grafik bunu düz bir taban çizgisi olarak
+     çiziyordu — yani "o ay ölçüm yok" ile "o ay değer sıfırdı" aynı
+     görünüyordu. Tansiyonda "tansiyon 0", sivilce kaydında "kür öncesi
+     sivilce yoktu" demek; ikincisi doğrudan yanlış bilgi.
+     Artık `null` gelen nokta ATLANMIYOR, çizgiyi BÖLÜYOR: veri nerede
+     başlıyorsa çizgi orada başlıyor.
+     ⚠ KATKISAL. Dizide null yoksa tek parça çiziliyor ve çıktı eskisiyle
+     bit bit aynı — yayındaki ürünler etkilenmiyor. */
+  const bosMu = v => v === null || v === undefined || (typeof v === "number" && isNaN(v));
   series.forEach((ser, si) => {
     const col = ser.color || "var(--c" + ((si % 6) + 1) + ")";
-    const pts = ser.data.map((v, i) => X(i) + "," + Y(v));
-    if (opts.area !== false){
-      const gid = "g" + si + "_" + Math.random().toString(36).slice(2,7);
-      const gd = sv("linearGradient", {id:gid, x1:"0", y1:"0", x2:"0", y2:"1"});
-      gd.appendChild(sv("stop", {offset:"0%",  "stop-color":col, "stop-opacity":".26"}));
-      gd.appendChild(sv("stop", {offset:"100%","stop-color":col, "stop-opacity":"0"}));
-      s.appendChild(sv("defs", {})).appendChild(gd);
-      s.appendChild(sv("polygon", {fill:"url(#"+gid+")",
-        points:(X(0)+","+(P.t+ih))+" "+pts.join(" ")+" "+(X(labels.length-1)+","+(P.t+ih))}));
-    }
-    s.appendChild(sv("polyline", {points:pts.join(" "), fill:"none", stroke:col,
-      "stroke-width":2, "stroke-linejoin":"round", "stroke-linecap":"round"}));
-    const li = ser.data.length - 1;
-    s.appendChild(sv("circle", {cx:X(li), cy:Y(ser.data[li]), r:3.4, fill:col,
-      stroke:"var(--paper)", "stroke-width":1.8}));
+    const parcalar = [];
+    let cur = [];
+    ser.data.forEach((v, i) => {
+      if (bosMu(v)){ if (cur.length) parcalar.push(cur); cur = []; return; }
+      cur.push({x:X(i), p:X(i) + "," + Y(v)});
+    });
+    if (cur.length) parcalar.push(cur);
+    if (!parcalar.length) return;
+    parcalar.forEach((seg, pi) => {
+      const pts = seg.map(o => o.p);
+      if (opts.area !== false){
+        const gid = "g" + si + "_" + pi + "_" + Math.random().toString(36).slice(2,7);
+        const gd = sv("linearGradient", {id:gid, x1:"0", y1:"0", x2:"0", y2:"1"});
+        gd.appendChild(sv("stop", {offset:"0%",  "stop-color":col, "stop-opacity":".26"}));
+        gd.appendChild(sv("stop", {offset:"100%","stop-color":col, "stop-opacity":"0"}));
+        s.appendChild(sv("defs", {})).appendChild(gd);
+        s.appendChild(sv("polygon", {fill:"url(#"+gid+")",
+          points:(seg[0].x+","+(P.t+ih))+" "+pts.join(" ")+" "+
+                 (seg[seg.length-1].x+","+(P.t+ih))}));
+      }
+      s.appendChild(sv("polyline", {points:pts.join(" "), fill:"none", stroke:col,
+        "stroke-width":2, "stroke-linejoin":"round", "stroke-linecap":"round"}));
+    });
+    /* Son nokta işareti: SON DOLU değerin üstünde. */
+    let li = ser.data.length - 1;
+    while (li >= 0 && bosMu(ser.data[li])) li--;
+    if (li >= 0)
+      s.appendChild(sv("circle", {cx:X(li), cy:Y(ser.data[li]), r:3.4, fill:col,
+        stroke:"var(--paper)", "stroke-width":1.8}));
   });
   /* x ekseni — kalabalıksa atlayarak yaz */
   const step = Math.ceil(labels.length / 12);
@@ -2727,15 +2766,35 @@ function barChart(labels, data, opts){
   opts = opts || {};
   const h = opts.height || 190, W = 720, P = {t:12, r:12, b:26, l:opts.left || 52};
   if (!labels || !labels.length) return noData(W, h);
-  const mx = niceMax(Math.max.apply(null, data.concat([0])) * 1.08) || 10;
-  if (!opts.left) P.l = axisLeft(Array.from({length:5}, (_, i) => mx - (mx/4) * i), opts.fmt, P.l);
+  /* ⚠ NEGATIF DEGER CIZILMIYORDU. bh = Math.max(0, Math.max(0,v)...)
+     her negatif cubugu SIFIR yukseklikte ciziyordu, yani eksi yonde
+     olcen her urun bombos bir grafik gosteriyordu — crochet'te "cupping"
+     tam olarak bu: urunun ana ozelligi bos kutu olarak cikti.
+     Artik veri eksiye giriyorsa sifir cizgisi ortaya alinip cubuk
+     asagi dogru ciziliyor. */
+  const dmax = Math.max.apply(null, data.concat([0]));
+  const dmin = Math.min.apply(null, data.concat([0]));
+  const neg  = dmin < 0;
+  /* ⚠ TAVAN OPT-IN. Yuzde grafiginde niceMax 100'u 200'e tasiyor ve
+     "%200 doz alindi" gibi okunan bir eksen cikiyor. `opts.max`
+     VERILMEDIKCE davranis aynen eskisi; negatif veride hic devreye
+     girmiyor (sifir cizgisi mantigi bozulmasin). */
+  const mx = (!neg && typeof opts.max === "number" && opts.max > 0)
+    ? opts.max
+    : niceMax(Math.max(Math.abs(dmax), Math.abs(dmin)) * 1.08) || 10;
+  const lo = neg ? -mx : 0;
+  const ticks = Array.from({length:5}, (_, i) => mx - ((mx - lo)/4) * i);
+  if (!opts.left) P.l = axisLeft(ticks, opts.fmt, P.l);
   const iw = W - P.l - P.r, ih = h - P.t - P.b;
   const bw = Math.min(46, (iw / labels.length) * .62);
   const s = sv("svg", {viewBox:"0 0 "+W+" "+h, width:"100%", height:h,
                        preserveAspectRatio:"none", style:"display:block"});
+  const yOf = v => P.t + ih - ((v - lo) / (mx - lo)) * ih;
+  const zeroY = yOf(0);
   for (let i = 0; i <= 4; i++){
-    const y = P.t + (ih/4) * i, v = mx - (mx/4) * i;
-    s.appendChild(sv("line", {x1:P.l, y1:y, x2:W-P.r, y2:y, stroke:"var(--hair2)"}));
+    const y = P.t + (ih/4) * i, v = ticks[i];
+    s.appendChild(sv("line", {x1:P.l, y1:y, x2:W-P.r, y2:y,
+      stroke:(neg && Math.abs(v) < 1e-9) ? "var(--hair)" : "var(--hair2)"}));
     const t = sv("text", {x:P.l-8, y:y+3.5, "text-anchor":"end", fill:"var(--muted)",
       "font-size":"10", "font-family":"var(--f-num)"});
     t.textContent = opts.fmt ? opts.fmt(v) : num(v);
@@ -2743,8 +2802,9 @@ function barChart(labels, data, opts){
   }
   data.forEach((v, i) => {
     const cx = P.l + (iw / labels.length) * (i + .5);
-    const bh = Math.max(0, (Math.max(0,v) / mx) * ih);
-    s.appendChild(sv("rect", {x:cx - bw/2, y:P.t + ih - bh, width:bw, height:bh,
+    const y0 = yOf(0), y1 = yOf(v);
+    const by = Math.min(y0, y1), bh = Math.max(1, Math.abs(y1 - y0));
+    s.appendChild(sv("rect", {x:cx - bw/2, y:by, width:bw, height:bh,
       rx:3, fill:opts.color || "var(--accent)", opacity:opts.dim && i < data.length-1 ? .55 : 1}));
     const t = sv("text", {x:cx, y:h-8, "text-anchor":(i === 0 ? "start" : i === labels.length - 1 ? "end" : "middle"), fill:"var(--muted)",
       "font-size":"10", "font-family":"var(--f-ui)"});
@@ -4222,7 +4282,16 @@ function alerts(){
       note:left < 0 ? "Expired " + (-left) + " days ago" : "Expires in " + left + " days",
       go:"docs"});
   });
-  rows("invoices").forEach(inv => {
+  /* ⚠ PARA KİPİ KAPALIYKEN FATURA UYARISI ÜRETİLİYORDU. `noMoney` ürünlerde
+     fatura listesi zaten yok ama aşağıdaki "faturalanmadı" döngüsü İŞ
+     KAYDININ KENDİSİNİ geziyor: doneState'te ve üç günden eski her satır
+     bir uyarı doğuruyordu. Ölçüldü — 8 kayıt ürününün 8'inde de panoda
+     40 uyarının 36-40'ı "Day not invoiced" idi, ve sondaki slice(0,40)
+     ürünün KENDİ alan uyarılarının tamamını kesip atıyordu: glp1'de 4/4,
+     migraine'de 1/1, bloodsugar'da 1/1 uyarı hiç görünmüyordu. Yani
+     ürünlerin en değerli paneli hem çöple doluydu hem de çalışmıyordu.
+     Kayıt kipinde ikisi de atlanıyor. */
+  if (!V.noMoney) rows("invoices").forEach(inv => {
     if (inv.paidDate) return;
     const due = invoiceDue(inv), od = due ? daysBetween(due, t) : 0;
     if (od <= 0) return;
@@ -4230,7 +4299,7 @@ function alerts(){
       text:(inv.no || "Invoice") + " · " + clientName(inv.clientId),
       note:od + " days overdue · " + money(invoiceTotal(inv)), go:"invoices"});
   });
-  rows(V.job.key).forEach(j => {
+  if (!V.noMoney) rows(V.job.key).forEach(j => {
     if (j.status !== V.job.doneState) return;
     const age = daysBetween(jobDate(j), t);
     if (age !== null && age > 3)
@@ -4238,9 +4307,18 @@ function alerts(){
         text:W("job") + " " + jobRef(j) + " not invoiced",
         note:"Finished " + age + " days ago · " + money(jobValue(j)), go:V.job.key});
   });
-  if (V.alerts) V.alerts().forEach(a => out.push(a));
-  const order = {bad:0, warn:1};
-  return out.sort((a, b) => (order[a.kind] - order[b.kind])).slice(0, 40);
+  /* ⚠ KIRPMA SIRASI. Liste 40'ta kesiliyor; dikeyin KENDİ uyarıları
+     alana özgü ve en değerli olanlar, çekirdeğinkiler jeneriktir.
+     Sona eklenince kesilen hep dikeyinkiler oluyordu — başa alındı ve
+     sıralama kararlı (aynı türde giriş sırası korunuyor). */
+  const kendi = V.alerts ? V.alerts() : [];
+  const hepsi = kendi.concat(out);
+  const order = {bad:0, warn:1, good:2};
+  return hepsi
+    .map((a, i) => ({a:a, i:i}))
+    .sort((x, y) => ((order[x.a.kind] === undefined ? 1 : order[x.a.kind]) -
+                     (order[y.a.kind] === undefined ? 1 : order[y.a.kind])) || (x.i - y.i))
+    .map(o => o.a).slice(0, 40);
 }
 
 /* ── 29_logdash.js ── */
@@ -4270,9 +4348,13 @@ function logRows(st){ return jobsIn(st.from, today()); }
 function logTrend(st, h){
   const m = V.metric || {}; const ht = h || 230;
   const lab = st.months.map(monthLabel);
+  /* ⚠ KAYIT OLMAYAN AY null — SIFIR DEĞİL. Sıfır dönmek "o ay ölçüm
+     alınmadı"yı "o ay değer sıfırdı" diye çizdiriyordu; grafiğin sol
+     yarısı düz bir tabana yapışıyor ve kaydın başlamadığı dönem gerçek
+     bir ölçümmüş gibi okunuyordu. areaChart null'ı boşluk sayıyor. */
   const avgBy = (mm) => st.months.map(mk => {
     const g = rows(V.job.key).filter(j => isRevenue(j) && monthKey(jobDate(j)) === mk);
-    if (!g.length) return 0;
+    if (!g.length) return null;
     return g.reduce((a, j) => a + metricVal(mm, j), 0) / g.length;
   });
   const s1 = avgBy(m);
@@ -4938,6 +5020,39 @@ function marginGauge(st){
 function trendGrid(st){
   const wf = V.job.workerEntity ? V.entities[V.job.workerEntity].jobField : null;
   const items = [];
+  /* ⚠ KAYIT KİPİNDE PARA YOKTUR. Bu ızgara "Revenue / Costs / Profit"
+     satırlarını koşulsuz basıyordu; `jobValue` kayıt ürünlerinde ölçülen
+     sayıyı döndürdüğü için izotretinoin günlüğünün panosunda
+     "Revenue $4,400 · Profit $4,400" yazıyordu — toplam miligram, dolar
+     kılığında. Kayıt kipinde izlenen sayının aylık ortalaması ve kayıt
+     sayısı gösteriliyor.
+     ⚠ VERİSİ OLMAYAN AY SERİDEN ÇIKARILIYOR, sıfırlanmıyor (bkz.
+     logTrend'deki aynı hata). */
+  if (V.noMoney){
+    const aylikOrt = mm => st.months.map(mk => {
+      const g = rows(V.job.key).filter(j => isRevenue(j) && monthKey(jobDate(j)) === mk);
+      return g.length ? g.reduce((a, j) => a + metricVal(mm, j), 0) / g.length : null;
+    }).filter(v => v !== null);
+    const say = st.months.map(mk =>
+      rows(V.job.key).filter(j => monthKey(jobDate(j)) === mk && isRevenue(j)).length);
+    const m1 = V.metric || {};
+    const simdi = l => l.length ? l[l.length - 1] : 0;
+    const s1 = aylikOrt(m1);
+    items.push({k:m1.label || "Value", v:simdi(s1), series:s1.slice(-9),
+      color:"var(--c1)", fmt:mFmt});
+    if (V.metric2){
+      const s2 = aylikOrt(V.metric2);
+      items.push({k:V.metric2.label, v:simdi(s2), series:s2.slice(-9), color:"var(--c5)",
+        fmt:v => V.metric2.fmt ? V.metric2.fmt(v) : num(v, 1)});
+    }
+    items.push({k:W("jobs"), v:st.cur.length, series:say.slice(-9),
+      color:"var(--c2)", fmt:num});
+    return el("div", {class:"panel"}, [
+      el("div", {class:"panel-head"}, [el("h2", {text:"Last Nine Months"}),
+        el("div", {class:"sp"}), el("div", {class:"hint", text:"month by month"})]),
+      el("div", {class:"panel-body flush"}, sparkGrid(items, {fmt:num}))
+    ]);
+  }
   items.push({k:"Revenue", v:st.rev, series:st.revSeries.slice(-9), color:"var(--c1)"});
   items.push({k:"Costs", v:st.rev - st.profit, series:st.costSeries.slice(-9),
     color:"var(--c5)"});
@@ -5135,12 +5250,20 @@ function viewJobs(){
     toolbar({
       id:V.job.key, repaint:render,
       placeholder:"Search " + W("jobNo").toLowerCase() + ", " + W("client").toLowerCase() + "…",
-      controls:[segControl([
-        {v:"open", t:"Open (" + all.filter(isOpen).length + ")"},
-        {v:"unpaid", t:"To bill"},
-        {v:V.job.paidState, t:"Paid"},
-        {v:"all", t:"All (" + all.length + ")"}
-      ], f, v => { JOB_FILTER = v; render(); })],
+      /* ⚠ PARA SEKMELERİ KAYIT KİPİNDE DE ÇIKIYORDU. İzotretinoin
+         günlüğünün üstünde "To bill" ve "Paid" yazıyordu; tıbbi bir
+         kayıtta faturalama sözcüğü ürünü anında ucuzlatıyor. Üstelik
+         `V.job.paidState` kayıt kipinde tanımsız, yani sekmenin değeri
+         undefined'dı. Kayıt kipinde ikisi de gizleniyor.
+         ⚠ "Open" ETİKETİ ALANA AİT. Kayıt ürününde açık iş yok; ne
+         olduğunu dikey söylüyor (V.job.openLabel). */
+      controls:[segControl(
+        [{v:"open", t:(V.job.openLabel || "Open") + " (" +
+                     all.filter(isOpen).length + ")"}]
+        .concat(V.noMoney ? [] : [{v:"unpaid", t:"To bill"},
+                                  {v:V.job.paidState, t:"Paid"}])
+        .concat([{v:"all", t:"All (" + all.length + ")"}]),
+        f, v => { JOB_FILTER = v; render(); })],
       actions:[
         el("button", {class:"btn sm", html:ICON.down + "<span>Export</span>",
           onclick:() => exportCSV(V.job.key + "-" + today(), V.job.cols(), list)}),
@@ -5573,7 +5696,7 @@ function repPnl(){
   const out = el("div", {class:"stack"});
   out.appendChild(el("div", {class:"grid g4"}, [
     kpi({label:"Revenue", value:money0(d.revenue), color:"var(--c1)",
-         note:d.ls.length + " loads"}),
+         note:d.ls.length + " " + W("jobsLower")}),   /* ⚠ SABIT "loads" idi: her üründe "235 loads" yazıyordu */
     kpi({label:"Total Costs", value:money0(d.costs), color:"var(--c5)",
          note:d.revenue ? pct(d.costs / d.revenue * 100, 0) + " of revenue" : "—"}),
     kpi({label:"Net Profit", value:money0(d.profit),
@@ -5607,7 +5730,7 @@ function repPnl(){
         return cats.length ? el("div", {class:"tw"}, t)
           : el("div", {class:"empty", style:{padding:"36px"}}, [
               el("h3", {text:"No costs in this period"}),
-              el("p", {text:"Log fuel and expenses to see where the money goes."})]);
+              el("p", {text:(V.noMoney ? "Log a few " + W("jobsLower") + " to see the trends." : "Log fuel and expenses to see where the money goes.")})]);
       })())
     ]),
     el("div", {class:"panel"}, [
@@ -5892,27 +6015,37 @@ function pickLogo(){
 }
 
 function viewSettings(){
+  /* ⚠ "Invoicing" SEKMESI KAYIT KIPINDE DE DURUYORDU: fatura numarasi,
+     odeme vadesi, fatura dipnotu — tansiyon gunlugunde, orgu takipcisinde.
+     Sekme adi da "Company" idi; kisisel kayit urununde sirket yok. */
   const tabs = [
-    {v:"company", t:"Company"}, {v:"look", t:"Appearance"},
-    {v:"invoice", t:"Invoicing"}, {v:"units", t:"Units & Formats"},
-    {v:"data", t:"Backup & Sync"}, {v:"about", t:"About"}
-  ];
+    {v:"company", t:V.noMoney ? "Your Details" : "Company"}, {v:"look", t:"Appearance"}]
+    .concat(V.noMoney ? [] : [{v:"invoice", t:"Invoicing"}])
+    .concat([{v:"units", t:"Units & Formats"},
+             {v:"data", t:"Backup & Sync"}, {v:"about", t:"About"}]);
+  if (V.noMoney && SET_TAB === "invoice") SET_TAB = "company";
   const out = el("div", {class:"stack"});
   out.appendChild(el("div", {class:"tabs"}, tabs.map(t =>
     el("button", {class:t.v === SET_TAB ? "on" : "", text:t.t,
       onclick:() => { SET_TAB = t.v; render(); }}))));
 
   if (SET_TAB === "company"){
-    out.appendChild(setPanel("Your Company",
-      "These details print on every invoice and report.", [
-      {k:"company", label:"Company name", ph:"Reyes Transport LLC", full:true},
-      {k:"address", label:"Street address", ph:"1420 Industrial Pkwy"},
-      {k:"city", label:"City, state, ZIP", ph:"Dallas, TX 75201"},
-      {k:"phone", label:"Phone", ph:"(555) 010-2233"},
-      {k:"email", label:"Email", ph:"billing@example.com"},
-      {k:"mc", label:"MC number", ph:"123456"},
-      {k:"dot", label:"DOT number", ph:"9876543"}
-    ]));
+    /* ⚠ MC/DOT NUMARASI NAKLIYEYE AIT. Kayit kipindeki (noMoney) bir
+       urunde — tansiyon gunlugu, sosyal hizmet saat kaydi — hem bu iki
+       alan hem de "her faturada basilir" cumlesi yanlis. Dikey kendi
+       basligini verebilir (V.ownerLabel). */
+    const para = !V.noMoney;
+    out.appendChild(setPanel(V.ownerLabel || (para ? "Your Company" : "Your Details"),
+      para ? "These details print on every invoice and report."
+           : "These details print on the reports you export.",
+      [{k:"company", label:V.ownerNameLabel || (para ? "Company name" : "Your name"),
+        ph:para ? "Reyes Transport LLC" : "", full:true},
+       {k:"address", label:"Street address"},
+       {k:"city", label:"City, state, ZIP"},
+       {k:"phone", label:"Phone"},
+       {k:"email", label:"Email"}]
+      .concat(para ? [{k:"mc", label:"MC number", ph:"123456"},
+                      {k:"dot", label:"DOT number", ph:"9876543"}] : [])));
   }
 
   if (SET_TAB === "look"){
@@ -5982,9 +6115,17 @@ function viewSettings(){
   }
 
   if (SET_TAB === "data"){
-    const counts = [["Loads","loads"],["Invoices","invoices"],["Trucks","trucks"],
-      ["Drivers","drivers"],["Customers","brokers"],["Fuel entries","fuel"],
-      ["Expenses","expenses"],["Documents","docs"]];
+    /* ⚠ BU LISTE SABIT NAKLIYE LISTESIYDI: "Loads · Trucks · Drivers ·
+       Fuel entries" HER URUNDE gorunuyordu ve nakliye disindaki 296
+       urunde hepsi 0 yaziyordu — sosyal hizmet kaydinda "0 Trucks".
+       Artik urunun KENDI listelerinden kuruluyor (dataLists) ve
+       basliklar dikeyin kendi sozcukleri. */
+    const counts = dataLists().map(k => {
+      if (k === V.job.key) return [W("jobs"), k];
+      if (k === "invoices") return ["Invoices", k];
+      const e = (V.entities || {})[k];
+      return [e ? (e.title || e.noun + "s") : (k.charAt(0).toUpperCase() + k.slice(1)), k];
+    }).concat(rows("docs").length ? [["Documents", "docs"]] : []);
     out.appendChild(el("div", {class:"panel"}, [
       el("div", {class:"panel-head"}, [el("h2", {text:"Your Data"}),
         el("div", {class:"hint", text:"Stored on this computer only — nothing is uploaded"})]),
@@ -6005,7 +6146,7 @@ function viewSettings(){
             onclick:importBackup}),
           el("button", {class:"btn danger", html:ICON.trash + "<span>Erase everything</span>",
             onclick:() => confirmBox("Erase all data?",
-              "Every load, invoice, truck and document on this device will be deleted. Download a backup first if you might want it back.",
+              "Everything on this device will be deleted — every " + W("jobLower") + " and every record. Download a backup first if you want to keep it.",
               () => confirmBox("Really erase?", "This is the last warning. There is no undo.",
                 () => toast("Live demo: changes are disabled. Purchase the app to save your own data.", "err"), "Erase everything"),
               "Continue")})
@@ -6238,7 +6379,7 @@ function viewSync(){
     body1.appendChild(stepCard(2, "That's it",
       auto ? ("The file is called " + (FILE_NAME || (APP() + "-<this computer>.json")) +
               ". Leave it alone — the app keeps it up to date. If this computer ever dies, open the app on a new one and read that folder.")
-           : "Once a folder is chosen there is no second step. Every load, invoice and receipt lands there as you work.",
+           : "Once a folder is chosen there is no second step. Every " + W("jobLower") + " you log lands there as you work.",
       null, auto));
   } else {
     body1.appendChild(el("div", {style:{padding:"13px 16px", display:"flex", gap:"11px",
@@ -6253,7 +6394,7 @@ function viewSync(){
       ])
     ]));
     body1.appendChild(stepCard(1, "Recommended: open this file in Chrome or Edge",
-      "Same file, same app, nothing to install or set up again. Right-click Freight Dispatch Pro.html, choose Open With, and pick Google Chrome or Microsoft Edge. Come back to this screen there and the folder option will be waiting. Both browsers are free, and your data still never leaves your computer.",
+      "Same file, same app, nothing to install or set up again. Right-click " + V.name + ".html, choose Open With, and pick Google Chrome or Microsoft Edge. Come back to this screen there and the folder option will be waiting. Both browsers are free, and your data still never leaves your computer.",
       null));
     body1.appendChild(stepCard(2, "Or stay in " + browserName() + " and save by hand",
       "Use Save backup file below, every week or two. It is not automatic, but it protects you just as well as long as you actually do it.",
@@ -6286,14 +6427,16 @@ function viewSync(){
             ? "Your folder already holds a live copy. This is for the other kind of accident — fire, theft, or the whole drive going with the computer. One file, once a month, kept off-site: emailed to yourself, or on a USB stick in the truck."
             : "One file with everything in it. Email it to yourself or keep it on a USB stick — anywhere that is not this computer."})),
       stepCard(1, "Save it",
-        "Everything in one file: loads, invoices, trucks, drivers, fuel, IFTA, settings.",
+        "Everything in one file: " + dataLists().map(k => k === V.job.key ? W("jobsLower")
+          : ((V.entities || {})[k] ? ((V.entities[k].title || V.entities[k].noun + "s").toLowerCase()) : k))
+          .join(", ") + " and your settings.",
         el("div", {class:"btn-row"}, [
           el("button", {class:"btn " + (auto || daysSince !== null ? "" : "pri"),
             html:ICON.down + "<span>Save backup file</span>",
             onclick:function(){ exportBackup(); S.set.lastBackup = today(); commit(); render(); }})
         ]), daysSince !== null && daysSince <= 30),
       stepCard(2, "Bring it back",
-        "On any computer, open the app, come here and restore. Same loads, same invoice numbers, same settings.",
+        "On any computer, open the app, come here and restore. The same " + W("jobsLower") + ", the same settings.",
         el("div", {class:"btn-row"}, [
           el("button", {class:"btn", html:ICON.up + "<span>Restore from a backup file</span>",
             onclick:importBackup})
@@ -6316,10 +6459,10 @@ function viewSync(){
            : "Choose a folder above that lives inside Dropbox, Google Drive, OneDrive or iCloud Drive.",
       null, auto));
     body3.appendChild(stepCard(2, "Copy the app to the other computer",
-      "Copy Freight Dispatch Pro.html across — USB stick, email, however. Open it there and pick the same folder on that machine too.",
+      "Copy " + V.name + ".html across — USB stick, email, however. Open it there and pick the same folder on that machine too.",
       null));
     body3.appendChild(stepCard(3, "Work on either one",
-      "Each computer writes its own file, so you never overwrite each other — even working at the same time. If the same load was changed in both places, the newer change wins. Give the cloud a moment to sync and both screens agree.",
+      "Each computer writes its own file, so you never overwrite each other — even working at the same time. If the same " + W("jobLower") + " was changed in both places, the newer change wins. Give the cloud a moment to sync and both screens agree.",
       null));
   } else {
     body3.appendChild(stepCard(1, "Pull the other computer's work in",
@@ -6362,7 +6505,7 @@ function viewSync(){
            şirket bilgisi, logo, fatura numarası. Önce demo verisiyle
            karışıyordu; artık değiştiriyor. Kullanıcı bunu bilmeli, yoksa
            silme korkusuyla uygulamayı hiç kullanmaz. */
-        el("span", {text:"If you have a folder connected, this is a five-second problem: open the app, choose the same folder again, and everything comes back — every record, your company details, your logo and your invoice numbering. You do have to pick the folder once more, because clearing your data is supposed to remove the browser's memory of it. Nothing in the folder is touched."})
+        el("span", {text:"If you have a folder connected, this is a five-second problem: open the app, choose the same folder again, and everything comes back — every record and every setting you had. You do have to pick the folder once more, because clearing your data is supposed to remove the browser's memory of it. Nothing in the folder is touched."})
       ])
     ]),
     el("div", {style:{display:"flex", gap:"11px", alignItems:"flex-start"}}, [
@@ -6735,7 +6878,8 @@ function buildPages(){
   PAGES.reports  = {t:"Reports", s:V.reportsSub || "Where the money goes", i:"chart", fn:viewReports};
   PAGES.sync     = {t:"Backup & Sync", s:"Keep your work safe — and on both computers if you want",
                     i:"folder", fn:viewSync};
-  PAGES.settings = {t:"Settings", s:"Company, look and your data", i:"gear", fn:viewSettings};
+  PAGES.settings = {t:"Settings", s:V.noMoney ? "Your details, look and your data"
+                    : "Company, look and your data", i:"gear", fn:viewSettings};
 
   NAV = V.nav.concat([["Your Data", ["sync", "settings"]]]);
 

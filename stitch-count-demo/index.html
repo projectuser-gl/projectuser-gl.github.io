@@ -1968,7 +1968,7 @@ async function firstRun(){
 
   if (HAS_FS) body.appendChild(card(ICON.folder,
     "I've used this before — find my work",
-    "Choose the folder you were saving to. Every record, your company details, your logo and your invoice numbering come back exactly as they were.",
+    "Choose the folder you were saving to. Every record and every setting comes back exactly as it was.",
     "accent", async () => { closeModal(); await pickFolder(); render(); }));
   else if (HAS_DIR_READ) body.appendChild(card(ICON.folder,
     "I've used this before — find my work",
@@ -1980,12 +1980,13 @@ async function firstRun(){
     "info", () => { closeModal(); importBackup(); }));
 
   body.appendChild(card(ICON.load, "Show me around with sample data",
-    "A working example business so you can click through every screen before entering anything real. You can clear it whenever you like.",
+    (V.noMoney ? "A worked example so you can click through every screen before entering anything real. You can clear it whenever you like."
+     : "A working example business so you can click through every screen before entering anything real. You can clear it whenever you like."),
     "good", () => { closeModal();
       S = normalize(ageDemoInvoices(V.demo())); saveLocal(); render();
       toast("This is sample data — clear it from Backup & Sync when you're ready."); }));
 
-  body.appendChild(card(ICON.plus, "Start empty — this is my business",
+  body.appendChild(card(ICON.plus, V.noMoney ? "Start empty" : "Start empty — this is my business",
     "Begin with nothing in it and enter your own work straight away.",
     "muted", () => { closeModal();
       S = normalize(null); saveLocal(); render(); go("settings"); }));
@@ -2485,7 +2486,7 @@ function pullFromFolderRead(){
     const files = Array.from(inp.files || [])
       .filter(f => fileMine(f.name));
     if (!files.length){
-      toast("No dispatch files in that folder.", "err");
+      toast("No " + V.name + " files in that folder.", "err");
       return;
     }
     let n = 0, seen = 0;
@@ -5695,7 +5696,7 @@ function repPnl(){
   const out = el("div", {class:"stack"});
   out.appendChild(el("div", {class:"grid g4"}, [
     kpi({label:"Revenue", value:money0(d.revenue), color:"var(--c1)",
-         note:d.ls.length + " loads"}),
+         note:d.ls.length + " " + W("jobsLower")}),   /* ⚠ SABIT "loads" idi: her üründe "235 loads" yazıyordu */
     kpi({label:"Total Costs", value:money0(d.costs), color:"var(--c5)",
          note:d.revenue ? pct(d.costs / d.revenue * 100, 0) + " of revenue" : "—"}),
     kpi({label:"Net Profit", value:money0(d.profit),
@@ -5729,7 +5730,7 @@ function repPnl(){
         return cats.length ? el("div", {class:"tw"}, t)
           : el("div", {class:"empty", style:{padding:"36px"}}, [
               el("h3", {text:"No costs in this period"}),
-              el("p", {text:"Log fuel and expenses to see where the money goes."})]);
+              el("p", {text:(V.noMoney ? "Log a few " + W("jobsLower") + " to see the trends." : "Log fuel and expenses to see where the money goes.")})]);
       })())
     ]),
     el("div", {class:"panel"}, [
@@ -6014,27 +6015,37 @@ function pickLogo(){
 }
 
 function viewSettings(){
+  /* ⚠ "Invoicing" SEKMESI KAYIT KIPINDE DE DURUYORDU: fatura numarasi,
+     odeme vadesi, fatura dipnotu — tansiyon gunlugunde, orgu takipcisinde.
+     Sekme adi da "Company" idi; kisisel kayit urununde sirket yok. */
   const tabs = [
-    {v:"company", t:"Company"}, {v:"look", t:"Appearance"},
-    {v:"invoice", t:"Invoicing"}, {v:"units", t:"Units & Formats"},
-    {v:"data", t:"Backup & Sync"}, {v:"about", t:"About"}
-  ];
+    {v:"company", t:V.noMoney ? "Your Details" : "Company"}, {v:"look", t:"Appearance"}]
+    .concat(V.noMoney ? [] : [{v:"invoice", t:"Invoicing"}])
+    .concat([{v:"units", t:"Units & Formats"},
+             {v:"data", t:"Backup & Sync"}, {v:"about", t:"About"}]);
+  if (V.noMoney && SET_TAB === "invoice") SET_TAB = "company";
   const out = el("div", {class:"stack"});
   out.appendChild(el("div", {class:"tabs"}, tabs.map(t =>
     el("button", {class:t.v === SET_TAB ? "on" : "", text:t.t,
       onclick:() => { SET_TAB = t.v; render(); }}))));
 
   if (SET_TAB === "company"){
-    out.appendChild(setPanel("Your Company",
-      "These details print on every invoice and report.", [
-      {k:"company", label:"Company name", ph:"Reyes Transport LLC", full:true},
-      {k:"address", label:"Street address", ph:"1420 Industrial Pkwy"},
-      {k:"city", label:"City, state, ZIP", ph:"Dallas, TX 75201"},
-      {k:"phone", label:"Phone", ph:"(555) 010-2233"},
-      {k:"email", label:"Email", ph:"billing@example.com"},
-      {k:"mc", label:"MC number", ph:"123456"},
-      {k:"dot", label:"DOT number", ph:"9876543"}
-    ]));
+    /* ⚠ MC/DOT NUMARASI NAKLIYEYE AIT. Kayit kipindeki (noMoney) bir
+       urunde — tansiyon gunlugu, sosyal hizmet saat kaydi — hem bu iki
+       alan hem de "her faturada basilir" cumlesi yanlis. Dikey kendi
+       basligini verebilir (V.ownerLabel). */
+    const para = !V.noMoney;
+    out.appendChild(setPanel(V.ownerLabel || (para ? "Your Company" : "Your Details"),
+      para ? "These details print on every invoice and report."
+           : "These details print on the reports you export.",
+      [{k:"company", label:V.ownerNameLabel || (para ? "Company name" : "Your name"),
+        ph:para ? "Reyes Transport LLC" : "", full:true},
+       {k:"address", label:"Street address"},
+       {k:"city", label:"City, state, ZIP"},
+       {k:"phone", label:"Phone"},
+       {k:"email", label:"Email"}]
+      .concat(para ? [{k:"mc", label:"MC number", ph:"123456"},
+                      {k:"dot", label:"DOT number", ph:"9876543"}] : [])));
   }
 
   if (SET_TAB === "look"){
@@ -6104,9 +6115,17 @@ function viewSettings(){
   }
 
   if (SET_TAB === "data"){
-    const counts = [["Loads","loads"],["Invoices","invoices"],["Trucks","trucks"],
-      ["Drivers","drivers"],["Customers","brokers"],["Fuel entries","fuel"],
-      ["Expenses","expenses"],["Documents","docs"]];
+    /* ⚠ BU LISTE SABIT NAKLIYE LISTESIYDI: "Loads · Trucks · Drivers ·
+       Fuel entries" HER URUNDE gorunuyordu ve nakliye disindaki 296
+       urunde hepsi 0 yaziyordu — sosyal hizmet kaydinda "0 Trucks".
+       Artik urunun KENDI listelerinden kuruluyor (dataLists) ve
+       basliklar dikeyin kendi sozcukleri. */
+    const counts = dataLists().map(k => {
+      if (k === V.job.key) return [W("jobs"), k];
+      if (k === "invoices") return ["Invoices", k];
+      const e = (V.entities || {})[k];
+      return [e ? (e.title || e.noun + "s") : (k.charAt(0).toUpperCase() + k.slice(1)), k];
+    }).concat(rows("docs").length ? [["Documents", "docs"]] : []);
     out.appendChild(el("div", {class:"panel"}, [
       el("div", {class:"panel-head"}, [el("h2", {text:"Your Data"}),
         el("div", {class:"hint", text:"Stored on this computer only — nothing is uploaded"})]),
@@ -6127,7 +6146,7 @@ function viewSettings(){
             onclick:importBackup}),
           el("button", {class:"btn danger", html:ICON.trash + "<span>Erase everything</span>",
             onclick:() => confirmBox("Erase all data?",
-              "Every load, invoice, truck and document on this device will be deleted. Download a backup first if you might want it back.",
+              "Everything on this device will be deleted — every " + W("jobLower") + " and every record. Download a backup first if you want to keep it.",
               () => confirmBox("Really erase?", "This is the last warning. There is no undo.",
                 () => toast("Live demo: changes are disabled. Purchase the app to save your own data.", "err"), "Erase everything"),
               "Continue")})
@@ -6360,7 +6379,7 @@ function viewSync(){
     body1.appendChild(stepCard(2, "That's it",
       auto ? ("The file is called " + (FILE_NAME || (APP() + "-<this computer>.json")) +
               ". Leave it alone — the app keeps it up to date. If this computer ever dies, open the app on a new one and read that folder.")
-           : "Once a folder is chosen there is no second step. Every load, invoice and receipt lands there as you work.",
+           : "Once a folder is chosen there is no second step. Every " + W("jobLower") + " you log lands there as you work.",
       null, auto));
   } else {
     body1.appendChild(el("div", {style:{padding:"13px 16px", display:"flex", gap:"11px",
@@ -6375,7 +6394,7 @@ function viewSync(){
       ])
     ]));
     body1.appendChild(stepCard(1, "Recommended: open this file in Chrome or Edge",
-      "Same file, same app, nothing to install or set up again. Right-click Freight Dispatch Pro.html, choose Open With, and pick Google Chrome or Microsoft Edge. Come back to this screen there and the folder option will be waiting. Both browsers are free, and your data still never leaves your computer.",
+      "Same file, same app, nothing to install or set up again. Right-click " + V.name + ".html, choose Open With, and pick Google Chrome or Microsoft Edge. Come back to this screen there and the folder option will be waiting. Both browsers are free, and your data still never leaves your computer.",
       null));
     body1.appendChild(stepCard(2, "Or stay in " + browserName() + " and save by hand",
       "Use Save backup file below, every week or two. It is not automatic, but it protects you just as well as long as you actually do it.",
@@ -6408,14 +6427,16 @@ function viewSync(){
             ? "Your folder already holds a live copy. This is for the other kind of accident — fire, theft, or the whole drive going with the computer. One file, once a month, kept off-site: emailed to yourself, or on a USB stick in the truck."
             : "One file with everything in it. Email it to yourself or keep it on a USB stick — anywhere that is not this computer."})),
       stepCard(1, "Save it",
-        "Everything in one file: loads, invoices, trucks, drivers, fuel, IFTA, settings.",
+        "Everything in one file: " + dataLists().map(k => k === V.job.key ? W("jobsLower")
+          : ((V.entities || {})[k] ? ((V.entities[k].title || V.entities[k].noun + "s").toLowerCase()) : k))
+          .join(", ") + " and your settings.",
         el("div", {class:"btn-row"}, [
           el("button", {class:"btn " + (auto || daysSince !== null ? "" : "pri"),
             html:ICON.down + "<span>Save backup file</span>",
             onclick:function(){ exportBackup(); S.set.lastBackup = today(); commit(); render(); }})
         ]), daysSince !== null && daysSince <= 30),
       stepCard(2, "Bring it back",
-        "On any computer, open the app, come here and restore. Same loads, same invoice numbers, same settings.",
+        "On any computer, open the app, come here and restore. The same " + W("jobsLower") + ", the same settings.",
         el("div", {class:"btn-row"}, [
           el("button", {class:"btn", html:ICON.up + "<span>Restore from a backup file</span>",
             onclick:importBackup})
@@ -6438,10 +6459,10 @@ function viewSync(){
            : "Choose a folder above that lives inside Dropbox, Google Drive, OneDrive or iCloud Drive.",
       null, auto));
     body3.appendChild(stepCard(2, "Copy the app to the other computer",
-      "Copy Freight Dispatch Pro.html across — USB stick, email, however. Open it there and pick the same folder on that machine too.",
+      "Copy " + V.name + ".html across — USB stick, email, however. Open it there and pick the same folder on that machine too.",
       null));
     body3.appendChild(stepCard(3, "Work on either one",
-      "Each computer writes its own file, so you never overwrite each other — even working at the same time. If the same load was changed in both places, the newer change wins. Give the cloud a moment to sync and both screens agree.",
+      "Each computer writes its own file, so you never overwrite each other — even working at the same time. If the same " + W("jobLower") + " was changed in both places, the newer change wins. Give the cloud a moment to sync and both screens agree.",
       null));
   } else {
     body3.appendChild(stepCard(1, "Pull the other computer's work in",
@@ -6484,7 +6505,7 @@ function viewSync(){
            şirket bilgisi, logo, fatura numarası. Önce demo verisiyle
            karışıyordu; artık değiştiriyor. Kullanıcı bunu bilmeli, yoksa
            silme korkusuyla uygulamayı hiç kullanmaz. */
-        el("span", {text:"If you have a folder connected, this is a five-second problem: open the app, choose the same folder again, and everything comes back — every record, your company details, your logo and your invoice numbering. You do have to pick the folder once more, because clearing your data is supposed to remove the browser's memory of it. Nothing in the folder is touched."})
+        el("span", {text:"If you have a folder connected, this is a five-second problem: open the app, choose the same folder again, and everything comes back — every record and every setting you had. You do have to pick the folder once more, because clearing your data is supposed to remove the browser's memory of it. Nothing in the folder is touched."})
       ])
     ]),
     el("div", {style:{display:"flex", gap:"11px", alignItems:"flex-start"}}, [
@@ -6857,7 +6878,8 @@ function buildPages(){
   PAGES.reports  = {t:"Reports", s:V.reportsSub || "Where the money goes", i:"chart", fn:viewReports};
   PAGES.sync     = {t:"Backup & Sync", s:"Keep your work safe — and on both computers if you want",
                     i:"folder", fn:viewSync};
-  PAGES.settings = {t:"Settings", s:"Company, look and your data", i:"gear", fn:viewSettings};
+  PAGES.settings = {t:"Settings", s:V.noMoney ? "Your details, look and your data"
+                    : "Company, look and your data", i:"gear", fn:viewSettings};
 
   NAV = V.nav.concat([["Your Data", ["sync", "settings"]]]);
 

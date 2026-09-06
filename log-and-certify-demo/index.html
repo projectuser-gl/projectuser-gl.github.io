@@ -1968,7 +1968,7 @@ async function firstRun(){
 
   if (HAS_FS) body.appendChild(card(ICON.folder,
     "I've used this before — find my work",
-    "Choose the folder you were saving to. Every record, your company details, your logo and your invoice numbering come back exactly as they were.",
+    "Choose the folder you were saving to. Every record and every setting comes back exactly as it was.",
     "accent", async () => { closeModal(); await pickFolder(); render(); }));
   else if (HAS_DIR_READ) body.appendChild(card(ICON.folder,
     "I've used this before — find my work",
@@ -1980,12 +1980,13 @@ async function firstRun(){
     "info", () => { closeModal(); importBackup(); }));
 
   body.appendChild(card(ICON.load, "Show me around with sample data",
-    "A working example business so you can click through every screen before entering anything real. You can clear it whenever you like.",
+    (V.noMoney ? "A worked example so you can click through every screen before entering anything real. You can clear it whenever you like."
+     : "A working example business so you can click through every screen before entering anything real. You can clear it whenever you like."),
     "good", () => { closeModal();
       S = normalize(ageDemoInvoices(V.demo())); saveLocal(); render();
       toast("This is sample data — clear it from Backup & Sync when you're ready."); }));
 
-  body.appendChild(card(ICON.plus, "Start empty — this is my business",
+  body.appendChild(card(ICON.plus, V.noMoney ? "Start empty" : "Start empty — this is my business",
     "Begin with nothing in it and enter your own work straight away.",
     "muted", () => { closeModal();
       S = normalize(null); saveLocal(); render(); go("settings"); }));
@@ -2485,7 +2486,7 @@ function pullFromFolderRead(){
     const files = Array.from(inp.files || [])
       .filter(f => fileMine(f.name));
     if (!files.length){
-      toast("No dispatch files in that folder.", "err");
+      toast("No " + V.name + " files in that folder.", "err");
       return;
     }
     let n = 0, seen = 0;
@@ -5695,7 +5696,7 @@ function repPnl(){
   const out = el("div", {class:"stack"});
   out.appendChild(el("div", {class:"grid g4"}, [
     kpi({label:"Revenue", value:money0(d.revenue), color:"var(--c1)",
-         note:d.ls.length + " loads"}),
+         note:d.ls.length + " " + W("jobsLower")}),   /* ⚠ SABIT "loads" idi: her üründe "235 loads" yazıyordu */
     kpi({label:"Total Costs", value:money0(d.costs), color:"var(--c5)",
          note:d.revenue ? pct(d.costs / d.revenue * 100, 0) + " of revenue" : "—"}),
     kpi({label:"Net Profit", value:money0(d.profit),
@@ -5729,7 +5730,7 @@ function repPnl(){
         return cats.length ? el("div", {class:"tw"}, t)
           : el("div", {class:"empty", style:{padding:"36px"}}, [
               el("h3", {text:"No costs in this period"}),
-              el("p", {text:"Log fuel and expenses to see where the money goes."})]);
+              el("p", {text:(V.noMoney ? "Log a few " + W("jobsLower") + " to see the trends." : "Log fuel and expenses to see where the money goes.")})]);
       })())
     ]),
     el("div", {class:"panel"}, [
@@ -6014,11 +6015,15 @@ function pickLogo(){
 }
 
 function viewSettings(){
+  /* ⚠ "Invoicing" SEKMESI KAYIT KIPINDE DE DURUYORDU: fatura numarasi,
+     odeme vadesi, fatura dipnotu — tansiyon gunlugunde, orgu takipcisinde.
+     Sekme adi da "Company" idi; kisisel kayit urununde sirket yok. */
   const tabs = [
-    {v:"company", t:"Company"}, {v:"look", t:"Appearance"},
-    {v:"invoice", t:"Invoicing"}, {v:"units", t:"Units & Formats"},
-    {v:"data", t:"Backup & Sync"}, {v:"about", t:"About"}
-  ];
+    {v:"company", t:V.noMoney ? "Your Details" : "Company"}, {v:"look", t:"Appearance"}]
+    .concat(V.noMoney ? [] : [{v:"invoice", t:"Invoicing"}])
+    .concat([{v:"units", t:"Units & Formats"},
+             {v:"data", t:"Backup & Sync"}, {v:"about", t:"About"}]);
+  if (V.noMoney && SET_TAB === "invoice") SET_TAB = "company";
   const out = el("div", {class:"stack"});
   out.appendChild(el("div", {class:"tabs"}, tabs.map(t =>
     el("button", {class:t.v === SET_TAB ? "on" : "", text:t.t,
@@ -6141,7 +6146,7 @@ function viewSettings(){
             onclick:importBackup}),
           el("button", {class:"btn danger", html:ICON.trash + "<span>Erase everything</span>",
             onclick:() => confirmBox("Erase all data?",
-              "Every load, invoice, truck and document on this device will be deleted. Download a backup first if you might want it back.",
+              "Everything on this device will be deleted — every " + W("jobLower") + " and every record. Download a backup first if you want to keep it.",
               () => confirmBox("Really erase?", "This is the last warning. There is no undo.",
                 () => toast("Live demo: changes are disabled. Purchase the app to save your own data.", "err"), "Erase everything"),
               "Continue")})
@@ -6873,7 +6878,8 @@ function buildPages(){
   PAGES.reports  = {t:"Reports", s:V.reportsSub || "Where the money goes", i:"chart", fn:viewReports};
   PAGES.sync     = {t:"Backup & Sync", s:"Keep your work safe — and on both computers if you want",
                     i:"folder", fn:viewSync};
-  PAGES.settings = {t:"Settings", s:"Company, look and your data", i:"gear", fn:viewSettings};
+  PAGES.settings = {t:"Settings", s:V.noMoney ? "Your details, look and your data"
+                    : "Company, look and your data", i:"gear", fn:viewSettings};
 
   NAV = V.nav.concat([["Your Data", ["sync", "settings"]]]);
 
