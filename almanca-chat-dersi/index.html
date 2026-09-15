@@ -1,0 +1,123 @@
+<title>Im Zug nach München</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400..800;1,14..32,400..600&display=swap">
+<style>
+:root{
+  --bg:#EEF0F6; --surface:#FFFFFF; --ink:#0E1424; --ink-2:#394257; --muted:#697287;
+  --line:#E1E5EE; --accent:#4F46E5; --accent-soft:#EEF0FF; --mark:#FFE17A; --mark-ink:#241C00;
+  --lukas:#0369A1; --lukas-soft:#E0F2FE; --anna:#BE185D; --anna-soft:#FCE7F3;
+  --shadow:0 1px 2px rgba(15,23,42,.06),0 18px 40px -22px rgba(30,41,80,.35);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B0F1C; --surface:#141A2B; --ink:#E9ECF5; --ink-2:#C4CADA; --muted:#8C95AB;
+    --line:#252D45; --accent:#9A93FF; --accent-soft:#221F4A; --mark:#FFE17A; --mark-ink:#241C00;
+    --lukas:#7DD3FC; --lukas-soft:#0C2A3E; --anna:#F9A8D4; --anna-soft:#3A1428;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 18px 40px -22px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B0F1C; --surface:#141A2B; --ink:#E9ECF5; --ink-2:#C4CADA; --muted:#8C95AB;
+  --line:#252D45; --accent:#9A93FF; --accent-soft:#221F4A; --mark:#FFE17A; --mark-ink:#241C00;
+  --lukas:#7DD3FC; --lukas-soft:#0C2A3E; --anna:#F9A8D4; --anna-soft:#3A1428;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 18px 40px -22px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;padding-inline:16px}
+.wrap{max-width:980px;margin:0 auto;padding-block:36px 56px;display:flex;flex-direction:column;gap:40px}
+.eyebrow{font-size:12px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font-size:clamp(30px,5vw,44px);line-height:1.08;letter-spacing:-.03em;font-weight:800;margin:8px 0 6px;text-wrap:balance}
+.sub{font-size:17px;color:var(--ink-2);margin:0;font-style:italic}
+h2{font-size:20px;letter-spacing:-.015em;font-weight:750;margin:0 0 4px}
+.lede{color:var(--muted);margin:0 0 18px;max-width:62ch}
+
+.player{display:flex;flex-direction:column;gap:14px}
+video{display:block;width:100%;max-width:100%;aspect-ratio:16/9;border-radius:16px;background:#0E1424;box-shadow:var(--shadow)}
+.facts{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}
+.facts li{display:flex;gap:6px;align-items:baseline;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:13px}
+.facts b{font-weight:650;font-variant-numeric:tabular-nums}
+.facts span{color:var(--muted)}
+.facts .ok{border-color:transparent;background:#E7F6EC;color:#15803D}
+.facts .ok span{color:#15803D}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .facts .ok{background:#0F2E1C;color:#86EFAC}:root:not([data-theme="light"]) .facts .ok span{color:#86EFAC}}
+:root[data-theme="dark"] .facts .ok{background:#0F2E1C;color:#86EFAC}
+:root[data-theme="dark"] .facts .ok span{color:#86EFAC}
+
+.frames{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.frames figure{margin:0;display:flex;flex-direction:column;gap:8px}
+.frames figure:first-child{grid-column:1/-1}
+.frames img{display:block;width:100%;max-width:100%;border-radius:12px;border:1px solid var(--line)}
+figcaption{display:flex;gap:10px;align-items:baseline;font-size:14px;color:var(--ink-2)}
+figcaption b{flex:none;font-size:12px;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:2px 9px}
+
+.dialog{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.dialog li{display:grid;grid-template-columns:76px minmax(0,1fr);gap:4px 14px;padding:14px 18px;border-top:1px solid var(--line)}
+.dialog li:first-child{border-top:0}
+.who{grid-row:span 2;align-self:start;justify-self:start;font-size:12px;font-weight:700;border-radius:999px;padding:3px 10px;margin-top:3px}
+.who.l{color:var(--lukas);background:var(--lukas-soft)}
+.who.r{color:var(--anna);background:var(--anna-soft)}
+.de{font-size:17px;font-weight:560;letter-spacing:-.01em}
+.de mark{background:var(--mark);color:var(--mark-ink);border-radius:5px;padding:0 4px}
+.tr{font-size:14.5px;color:var(--muted);font-style:italic}
+
+footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px}
+footer code{font-size:12.5px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+
+@media (max-width:640px){
+  .wrap{padding-block:22px 40px;gap:32px}
+  .frames{grid-template-columns:minmax(0,1fr)}
+  .dialog li{grid-template-columns:minmax(0,1fr);padding:12px 14px}
+  .who{grid-row:auto}
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Akıcı Almanca · Ders 12 · A2</div>
+    <h1>Im Zug nach München</h1>
+    <p class="sub">Münih treninde. İlk chat dersi videosu</p>
+  </header>
+
+  <section class="player" aria-label="Video">
+    <video id="lesson-video" controls playsinline preload="metadata" poster="preview/1_giris.png" src="video.mp4"></video>
+    <ul class="facts">
+      <li><b>3:01</b><span>süre</span></li>
+      <li><b>1920×1080</b><span>25 fps</span></li>
+      <li><b>10</b><span>satır</span></li>
+      <li><b>Qwen3-TTS 1.7B</b><span>Ryan · Serena</span></li>
+      <li><b>7,2 MB</b><span>mp4</span></li>
+      <li class="ok"><b>10/10</b><span>satır Whisper kontrolünden geçti</span></li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="flow-h">
+    <h2 id="flow-h">Her satırın akışı</h2>
+    <p class="lede">Ders adı okunur. Her mesaj önce yalnız Almanca, sonra Türkçe çevirisiyle bir kez daha okunur. Sonda diyalog çevirisiz tekrar dinletilir.</p>
+    <div class="frames">
+      <figure><img src="preview/1_giris.png" alt="Giriş kartı: ders adı, senaryo ve iki karakter" loading="lazy"><figcaption><b>Giriş</b>Ders adı ve senaryo, anlatıcı başlığı okur</figcaption></figure>
+      <figure><img src="preview/4_yaziyor.png" alt="Anna yazıyor göstergesi" loading="lazy"><figcaption><b>1</b>Karşı taraf yazıyor</figcaption></figure>
+      <figure><img src="preview/2_dinle.png" alt="Lukas'ın mesajı, çeviri kapalı" loading="lazy"><figcaption><b>2</b>Dinle: yalnız Almanca</figcaption></figure>
+      <figure><img src="preview/3_anla.png" alt="Aynı mesaj Türkçe çevirisiyle" loading="lazy"><figcaption><b>3</b>Anla: çeviri açılır, tekrar okunur</figcaption></figure>
+      <figure><img src="preview/5_tekrar.png" alt="Tekrar turu, çeviriler gizli" loading="lazy"><figcaption><b>Son</b>Tekrar: çevirisiz baştan sona</figcaption></figure>
+    </div>
+  </section>
+
+  <section aria-labelledby="dialog-h">
+    <h2 id="dialog-h">Diyalog</h2>
+    <p class="lede">Sarı kelimeler dersin beş hedef kelimesi. Videoda soldaki listede o an geçen kelime yanar.</p>
+    <ol class="dialog">
+      <li><span class="who l">Lukas</span><div class="de">Entschuldigung, ist dieser <mark>Platz</mark> noch frei?</div><div class="tr">Affedersiniz, bu yer boş mu?</div></li>
+      <li><span class="who r">Anna</span><div class="de">Ja, natürlich. Setzen Sie sich bitte.</div><div class="tr">Evet, tabii. Buyurun oturun.</div></li>
+      <li><span class="who l">Lukas</span><div class="de">Danke! Fahren Sie auch nach München?</div><div class="tr">Teşekkürler! Siz de mi Münih'e gidiyorsunuz?</div></li>
+      <li><span class="who r">Anna</span><div class="de">Ja, ich <mark>besuche</mark> dort meine Schwester.</div><div class="tr">Evet, orada kız kardeşimi ziyaret ediyorum.</div></li>
+      <li><span class="who l">Lukas</span><div class="de">Schön! Ich habe dort ein <mark>Vorstellungsgespräch</mark>.</div><div class="tr">Ne güzel! Orada bir iş görüşmem var.</div></li>
+      <li><span class="who r">Anna</span><div class="de">Wirklich? Wo ist die Firma denn?</div><div class="tr">Gerçekten mi? Firma nerede peki?</div></li>
+      <li><span class="who l">Lukas</span><div class="de">Am Marienplatz. Ich kenne den Weg nicht.</div><div class="tr">Marienplatz'ta. Yolu bilmiyorum.</div></li>
+      <li><span class="who r">Anna</span><div class="de">Die <mark>Straßenbahn</mark> fährt direkt dorthin.</div><div class="tr">Tramvay doğrudan oraya gidiyor.</div></li>
+      <li><span class="who l">Lukas</span><div class="de">Super, das ist sehr hilfreich. Vielen Dank!</div><div class="tr">Süper, bu çok yardımcı oldu. Çok teşekkürler!</div></li>
+      <li><span class="who r">Anna</span><div class="de">Gern geschehen. Ich <mark>drücke</mark> Ihnen die <mark>Daumen</mark>!</div><div class="tr">Rica ederim. Size şans diliyorum!</div></li>
+    </ol>
+  </section>
+
+</div>
