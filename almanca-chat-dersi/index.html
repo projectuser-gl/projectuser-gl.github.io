@@ -46,7 +46,7 @@ video{display:block;width:100%;max-width:100%;aspect-ratio:16/9;border-radius:16
 
 .frames{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
 .frames figure{margin:0;display:flex;flex-direction:column;gap:8px}
-.frames figure:first-child{grid-column:1/-1}
+.frames figure.wide{grid-column:1/-1}
 .frames img{display:block;width:100%;max-width:100%;border-radius:12px;border:1px solid var(--line)}
 figcaption{display:flex;gap:10px;align-items:baseline;font-size:14px;color:var(--ink-2)}
 figcaption b{flex:none;font-size:12px;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:2px 9px}
@@ -95,14 +95,13 @@ footer code{font-size:12.5px;background:var(--surface);border:1px solid var(--li
     <h2 id="flow-h">Dersin akışı</h2>
     <p class="lede">Dört bölüm: her mesaj önce yalnız Almanca, sonra Türkçe çevirisiyle okunur. Konuşma pratiğinde öğrenci Anna olur: Türkçesini görür, süre bitmeden Almancasını söyler, sonra doğrusunu dinler. Sonda diyalog çevirisiz tekrar dinletilir.</p>
     <div class="frames">
-      <figure><img src="preview/1_giris.png" alt="Giriş kartı: ders adı, senaryo ve iki karakter" loading="lazy"><figcaption><b>Giriş</b>Ders adı ve senaryo, anlatıcı başlığı okur</figcaption></figure>
-      <figure><img src="preview/4_yaziyor.png" alt="Anna yazıyor göstergesi" loading="lazy"><figcaption><b>1</b>Karşı taraf yazıyor</figcaption></figure>
-      <figure><img src="preview/2_dinle.png" alt="Lukas'ın mesajı, çeviri kapalı" loading="lazy"><figcaption><b>2</b>Dinle: yalnız Almanca</figcaption></figure>
-      <figure><img src="preview/3_anla.png" alt="Aynı mesaj Türkçe çevirisiyle" loading="lazy"><figcaption><b>3</b>Anla: çeviri açılır, tekrar okunur</figcaption></figure>
-      <figure><img src="preview/6_konus_giris.png" alt="Konuşma pratiği giriş kartı" loading="lazy"><figcaption><b>Konuş</b>Bölüm girişi: Anna sensin</figcaption></figure>
-      <figure><img src="preview/7_sira_sende.png" alt="Anna'nın satırı yalnız Türkçe, geri sayım" loading="lazy"><figcaption><b>4</b>Sıra sende: Türkçesini gör, Almancasını söyle</figcaption></figure>
-      <figure><img src="preview/8_dogrusu.png" alt="Doğru Almancası açılır ve okunur" loading="lazy"><figcaption><b>5</b>Doğrusu açılır ve okunur</figcaption></figure>
-      <figure><img src="preview/5_tekrar.png" alt="Tekrar turu, çeviriler gizli" loading="lazy"><figcaption><b>Son</b>Tekrar: çevirisiz baştan sona</figcaption></figure>
+      <figure class="wide"><img src="preview/1_giris.png" alt="Giriş kartı: ders adı, senaryo ve iki karakter" loading="lazy"><figcaption><b>Giriş</b>Ders adı ve senaryo, anlatıcı başlığı okur</figcaption></figure>
+      <figure><img src="preview/2_dinle.png" alt="Lukas'ın mesajı, çeviri kapalı" loading="lazy"><figcaption><b>Dinle</b>Mesaj yalnız Almanca okunur</figcaption></figure>
+      <figure><img src="preview/3_anla.png" alt="Aynı mesaj Türkçe çevirisiyle" loading="lazy"><figcaption><b>Anla</b>Çeviri açılır, satır tekrar okunur</figcaption></figure>
+      <figure class="wide"><img src="preview/6_konus_giris.png" alt="Konuşma pratiği giriş kartı" loading="lazy"><figcaption><b>Konuş</b>Bölüm girişi: bu turda Anna sensin</figcaption></figure>
+      <figure><img src="preview/7_sira_sende.png" alt="Anna'nın satırı yalnız Türkçe, geri sayım" loading="lazy"><figcaption><b>Sıra sende</b>Türkçesini gör, süre bitmeden Almancasını söyle</figcaption></figure>
+      <figure><img src="preview/8_dogrusu.png" alt="Doğru Almancası açılır ve okunur" loading="lazy"><figcaption><b>Doğrusu</b>Almancası açılır ve okunur</figcaption></figure>
+      <figure class="wide"><img src="preview/5_tekrar.png" alt="Tekrar turu, çeviriler gizli" loading="lazy"><figcaption><b>Tekrar</b>Diyalog çevirisiz baştan sona</figcaption></figure>
     </div>
   </section>
 
